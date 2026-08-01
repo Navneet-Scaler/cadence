@@ -26,6 +26,7 @@
 -- Idempotent: safe to re-run. Drops in FK-dependency order first.
 -- =============================================================================
 
+DROP VIEW  IF EXISTS v_user_consistency       CASCADE;
 DROP VIEW  IF EXISTS v_daily_active_users     CASCADE;
 DROP VIEW  IF EXISTS v_clean_transactions     CASCADE;
 DROP TABLE IF EXISTS streak_observations      CASCADE;
@@ -215,6 +216,76 @@ SELECT txn_date,
 FROM v_clean_transactions
 WHERE status = 'success'
 GROUP BY txn_date;
+
+
+-- Per-user investing consistency, at one row per user.
+--
+-- user_streaks is at per-streak grain (many rows per user). Anything asking
+-- "how consistent is this investor?" needs per-user grain, and that aggregation
+-- is owned here rather than by each consumer — if the definition of a streak
+-- ever changes, every consumer moves with it instead of silently disagreeing.
+--
+-- Consumed by the Cadence dashboard and by downstream projects that treat
+-- investing consistency as a behavioural feature. Treat the column set as a
+-- contract: add columns freely, but renaming or redefining one is a breaking
+-- change for anything reading it.
+CREATE VIEW v_user_consistency AS
+WITH streak_stats AS (
+    SELECT user_id,
+           MAX(streak_length)                                  AS longest_streak,
+           COUNT(*)::int                                       AS total_streaks,
+           -- A "break" is a streak that actually ended. A censored streak is
+           -- still running at the edge of the data and must not be counted.
+           COUNT(*) FILTER (WHERE NOT is_censored)::int        AS streak_breaks,
+           COUNT(*) FILTER (WHERE recovered)::int              AS recoveries,
+           ROUND(AVG(streak_length), 2)                        AS avg_streak_length,
+           BOOL_OR(is_censored)                                AS currently_active,
+           MAX(streak_end)                                     AS last_active_date
+    FROM user_streaks
+    GROUP BY user_id
+),
+activity AS (
+    SELECT user_id,
+           COUNT(DISTINCT txn_date) FILTER (WHERE status = 'success')::int AS successful_days,
+           MIN(txn_date)                                                   AS first_txn_date,
+           SUM(COALESCE(amount, 0)) FILTER (WHERE status = 'success')      AS total_invested
+    FROM v_clean_transactions
+    GROUP BY user_id
+),
+window_end AS (
+    SELECT MAX(txn_date) AS last_observed_day FROM v_clean_transactions
+)
+SELECT u.user_id,
+       u.signup_date,
+       u.city_tier,
+       u.kyc_status,
+       COALESCE(a.successful_days, 0)                          AS successful_days,
+       COALESCE(a.total_invested, 0)                           AS total_invested,
+       COALESCE(s.longest_streak, 0)                           AS longest_streak,
+       COALESCE(s.avg_streak_length, 0)                        AS avg_streak_length,
+       COALESCE(s.total_streaks, 0)                            AS total_streaks,
+       COALESCE(s.streak_breaks, 0)                            AS streak_breaks,
+       COALESCE(s.recoveries, 0)                               AS recoveries,
+       COALESCE(s.currently_active, FALSE)                     AS currently_active,
+       s.last_active_date,
+       -- Days the account has existed inside the observation window. Guards
+       -- against a same-day signup producing a divide-by-zero.
+       GREATEST((w.last_observed_day - u.signup_date) + 1, 1)  AS observed_days,
+       -- The headline consistency metric: share of days since signup on which
+       -- the user actually invested. Directly comparable across cohorts because
+       -- it is normalised by exposure, unlike a raw successful-day count.
+       ROUND(
+           COALESCE(a.successful_days, 0)::numeric
+           / GREATEST((w.last_observed_day - u.signup_date) + 1, 1),
+           4
+       )                                                       AS active_day_ratio
+FROM users u
+CROSS JOIN window_end w
+LEFT JOIN streak_stats s ON s.user_id = u.user_id
+LEFT JOIN activity a     ON a.user_id = u.user_id;
+
+COMMENT ON VIEW v_user_consistency IS
+    'One row per user: longest streak, successful days, active-day ratio, and streak-break count. Owns the definition of "investing consistency" so every consumer shares it. Depends on user_streaks being built — run the streak builder first or the streak columns read 0.';
 
 
 -- =============================================================================

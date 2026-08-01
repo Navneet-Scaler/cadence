@@ -1,4 +1,4 @@
-.PHONY: help setup db-up db-down db-shell schema run-sim streak survival cohort nudge report test lint fmt notebook clean
+.PHONY: help setup db-up db-down db-shell schema run-sim reseed streak survival cohort nudge report test lint fmt notebook clean
 
 VENV := venv
 PY   := $(VENV)/bin/python
@@ -31,8 +31,11 @@ db-shell:  ## Open a psql shell inside the container
 schema:  ## Apply sql/schema.sql to the local database
 	docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U cadence_user -d cadence < sql/schema.sql
 
-run-sim:  ## Generate synthetic data and load it into Postgres
+run-sim:  ## Generate synthetic data and load it into Postgres (refuses if data exists)
 	$(PY) -m src.simulate.generate_daily_sip_data
+
+reseed:  ## DESTRUCTIVE: wipe all tables, restart user_id at 1, regenerate
+	$(PY) -m src.simulate.generate_daily_sip_data --reseed
 
 streak:  ## Build streak tables from raw transactions
 	$(PY) -m src.analysis.streak_builder
@@ -49,7 +52,7 @@ nudge:  ## Run the nudge treatment/control statistical test
 report:  ## Generate the weekly markdown report
 	$(PY) -m src.reporting.generate_weekly_report
 
-all: schema run-sim streak survival cohort nudge report  ## Full pipeline, end to end
+all: schema reseed streak survival cohort nudge report  ## Full pipeline, end to end
 
 test:  ## Run the test suite
 	$(VENV)/bin/pytest -q

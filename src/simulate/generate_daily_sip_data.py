@@ -550,14 +550,29 @@ def seed_quality_issues(
 # --------------------------------------------------------------------------- #
 
 
+class ExistingDataError(RuntimeError):
+    """Raised when a run would destroy data that already exists."""
+
+
+def count_existing_users() -> int:
+    """How many users are already loaded."""
+    return int(db.read_sql("SELECT COUNT(*) AS n FROM users")["n"].iat[0])
+
+
 def truncate_all() -> None:
-    """Clear every table so a re-run is deterministic rather than additive."""
+    """Clear every table so a re-run is deterministic rather than additive.
+
+    ``RESTART IDENTITY CASCADE`` resets ``users.user_id`` to 1 and cascades to
+    every table with a foreign key to it — including tables owned by other
+    projects that extend this schema. That is destructive enough that it must
+    never happen implicitly: :func:`main` requires an explicit ``--reseed``.
+    """
     db.execute(
         "TRUNCATE streak_observations, user_streaks, data_quality_flags, "
         "experiment_assignments, nudges_sent, sip_daily_transactions, "
         "sim_user_profile, users RESTART IDENTITY CASCADE"
     )
-    logger.info("truncated all tables")
+    logger.warning("TRUNCATED all tables and restarted user_id at 1")
 
 
 def load(result: SimulationResult, transactions: pd.DataFrame) -> None:
@@ -608,6 +623,15 @@ def main() -> None:
     parser.add_argument(
         "--no-load", action="store_true", help="generate but do not write to the DB"
     )
+    parser.add_argument(
+        "--reseed",
+        action="store_true",
+        help=(
+            "DESTRUCTIVE: truncate every table and restart user_id at 1. Required "
+            "when users already exist. Cascades to anything with a foreign key to "
+            "users, including tables owned by downstream projects."
+        ),
+    )
     args = parser.parse_args()
 
     config = SimulationConfig.from_env()
@@ -637,9 +661,29 @@ def main() -> None:
         logger.info("--no-load set; skipping database write")
         return
 
+    # Reseeding restarts user_id at 1 and cascades to every FK child, which would
+    # silently orphan rows in any project extending this schema. Refuse to do it
+    # as a side effect of a plain run — it has to be asked for by name.
+    existing = count_existing_users()
+    if existing and not args.reseed:
+        raise ExistingDataError(
+            f"{existing:,} users already exist. A load would truncate them and restart "
+            "user_id at 1, cascading to every table with a foreign key to users. "
+            "Re-run with --reseed if that is genuinely what you want."
+        )
+
+    if existing:
+        logger.warning("--reseed given: destroying %s existing users", f"{existing:,}")
+
     truncate_all()
     load(result, transactions)
-    logger.info("simulation complete")
+    logger.info(
+        "simulation complete (seed=%d, window=%s..%s) — user_id range 1..%s",
+        config.random_seed,
+        config.start_date,
+        config.end_date,
+        f"{config.n_users:,}",
+    )
 
 
 if __name__ == "__main__":

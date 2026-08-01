@@ -140,3 +140,20 @@ def test_payday_multiplier_peaks_in_the_first_week() -> None:
     assert sim._payday_multiplier(3) > sim._payday_multiplier(10)
     assert sim._payday_multiplier(10) > sim._payday_multiplier(20)
     assert sim._payday_multiplier(20) > sim._payday_multiplier(28)
+
+
+def test_load_refuses_to_destroy_existing_users_without_reseed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Guards downstream projects whose foreign keys point at users(user_id).
+
+    TRUNCATE ... RESTART IDENTITY CASCADE would orphan every dependent row, so a
+    plain run must refuse rather than do it silently.
+    """
+    monkeypatch.setattr(sim, "count_existing_users", lambda: 5000)
+    monkeypatch.setattr(sim, "truncate_all", lambda: pytest.fail("must not truncate"))
+    monkeypatch.setattr(sim, "load", lambda *a, **k: pytest.fail("must not load"))
+    monkeypatch.setattr("sys.argv", ["generate_daily_sip_data", "--users", "5", "--seed", "1"])
+
+    with pytest.raises(sim.ExistingDataError, match="--reseed"):
+        sim.main()
