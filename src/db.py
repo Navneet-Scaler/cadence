@@ -7,6 +7,7 @@ same code runs against a local Docker Postgres, CI, or a managed instance.
 
 from __future__ import annotations
 
+import io
 import logging
 import os
 from collections.abc import Iterator
@@ -97,3 +98,41 @@ def execute_script(path: str | Path) -> None:
     logger.info("executing sql script: %s", sql_path.name)
     with get_engine().begin() as conn:
         conn.exec_driver_sql(sql_path.read_text())
+
+
+def bulk_load(df: pd.DataFrame, table: str, columns: list[str] | None = None) -> int:
+    """Load a DataFrame into ``table`` using Postgres COPY.
+
+    COPY rather than INSERT because the simulator writes on the order of a
+    million transaction rows; row-by-row inserts turn a 20-second load into
+    several minutes. NULLs are encoded as empty unquoted fields.
+
+    Returns:
+        Number of rows written.
+    """
+    cols = columns or list(df.columns)
+    buffer = io.StringIO()
+    df[cols].to_csv(buffer, index=False, header=False, na_rep="")
+    buffer.seek(0)
+
+    column_list = ", ".join(cols)
+    copy_sql = f"COPY {table} ({column_list}) FROM STDIN WITH (FORMAT csv, NULL '', QUOTE '\"')"
+
+    raw = get_engine().raw_connection()
+    try:
+        with raw.cursor() as cur:
+            cur.copy_expert(copy_sql, buffer)
+        raw.commit()
+    finally:
+        raw.close()
+
+    logger.info("loaded %s rows into %s", f"{len(df):,}", table)
+    return len(df)
+
+
+def reset_sequence(table: str, pk_column: str) -> None:
+    """Re-sync a SERIAL sequence after a COPY that supplied explicit ids."""
+    execute(
+        f"SELECT setval(pg_get_serial_sequence('{table}', '{pk_column}'), "
+        f"COALESCE((SELECT MAX({pk_column}) FROM {table}), 1))"
+    )
