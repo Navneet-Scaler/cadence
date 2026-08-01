@@ -1,0 +1,38 @@
+# environments
+venv/
+.venv/
+.env
+__pycache__/
+*.pyc
+
+# jupyter
+.ipynb_checkpoints/
+
+# data
+*.csv
+*.parquet
+/data/
+*.sql.gz
+
+# db
+pgdata/
+docker-volumes/
+
+# os / editor
+.DS_Store
+.vscode/
+.idea/
+
+# metabase local app data
+metabase-data/
+*.db
+
+# build / tooling caches
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+
+# generated reports (regenerable from src/reporting)
+/reports/
