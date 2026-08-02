@@ -1,21 +1,21 @@
 # Metabase Dashboard
 
-The dashboard the growth team is meant to open every morning: **Cadence — Daily
+The dashboard the growth team is meant to open every morning: **Cadence, Daily
 SIP Habit & Streak Retention**, eight cards, built from the same views the Python
 analysis reads.
 
 ## Reproducible, not clicked together
 
 Metabase stores questions and dashboards in its own application database. That
-means a card built in the UI is **not version controlled** — it can't be
+means a card built in the UI is **not version controlled**, it can't be
 reviewed, diffed, or restored after someone edits it, and it silently drifts
 from the analysis it's supposed to mirror.
 
 So the dashboard here is provisioned from code:
 
-- `sql/dashboard_questions.sql` — every card as a runnable query, with comments
+- `sql/dashboard_questions.sql`: every card as a runnable query, with comments
   explaining what decision it supports.
-- `scripts/provision_metabase.py` — parses that file and builds the connection,
+- `scripts/provision_metabase.py`: parses that file and builds the connection,
   the cards, and the dashboard layout through the Metabase API.
 
 The script **parses the SQL file rather than duplicating the queries**, so there
@@ -48,7 +48,7 @@ Then open **http://localhost:3001** and sign in with those credentials.
 
 **The database host is `postgres`, not `localhost`.** Metabase runs in the same
 Docker network as the database, so it connects to the *service name* on the
-container's internal port **5432** — not the host-side port. Entering
+container's internal port **5432**, not the host-side port. Entering
 `localhost:5433` (which is what works from your laptop) gives a connection
 refused that looks like a credentials problem and isn't. The provisioning script
 sets this correctly via `METABASE_DB_HOST` / `METABASE_DB_PORT`.
@@ -63,7 +63,7 @@ with `METABASE_PORT` in `.env` if 3001 is also taken.
 |---|---|---|---|
 | 1 | Daily active investors | line | Top-line habit metric. Everything else explains a move here. |
 | 2 | Live streaks by length band | bar | How many people currently hold a habit, and how deep. |
-| 3 | **Recovery rate by days missed** | bar | **The decision card** — where the intervention day comes from. |
+| 3 | **Recovery rate by days missed** | bar | **The decision card**, where the intervention day comes from. |
 | 4 | Nudge effect: treatment vs control | bar | Whether the intervention actually works, per trigger day. |
 | 5 | Weekly cohort retention | table | Whether newer cohorts behave better than older ones. |
 | 6 | Consistency distribution | bar | Shape of the user base by active-day ratio. |
@@ -78,18 +78,18 @@ visible next to the reason not to trust it, rather than buried in a separate
 
 Verified against the live instance (5,000 users, 373,387 transactions):
 
-**Card 3 — recovery by days missed.** 93% recover after 1 day missed, 84% after
+**Card 3, recovery by days missed.** 93% recover after 1 day missed, 84% after
 3, 69% after 5, 51% after 7. The collapse between day 3 and day 7 is the entire
 retention problem in one card.
 
-**Card 6 — consistency is bimodal, not a bell curve.** 2,435 users sit in the
+**Card 6, consistency is bimodal, not a bell curve.** 2,435 users sit in the
 bottom 10% active-day ratio, while 1,041 sit above 90%. There is no meaningful
 middle. This was not something the analysis went looking for, and it changes the
 framing: the product isn't converting a broad population of moderate investors,
 it's producing two distinct populations, and the interesting question is what
 moves someone from the left cluster to the right one.
 
-**Card 7 — day-of-week effect.** Friday averages 1,145 active investors against
+**Card 7, day-of-week effect.** Friday averages 1,145 active investors against
 Sunday's 696, a 39% weekend drop. Any campaign measured Monday-to-Monday will
 read very differently from one measured Thursday-to-Thursday.
 
@@ -98,7 +98,7 @@ read very differently from one measured Thursday-to-Thursday.
 ![Full Cadence dashboard, all eight cards](images/dashboard_full.png)
 
 Captured headlessly from a live, freshly-provisioned instance (temporary public
-link, revoked immediately after) — not a mockup, not a description of intent.
+link, revoked immediately after), not a mockup, not a description of intent.
 
 Taking this screenshot caught a real bug: cards 3, 4, 6, and 7 initially
 rendered as an unconfigured "which fields do you want to use for the X and Y
@@ -107,11 +107,28 @@ for Metabase to infer axes from, so `upsert_card` in
 [`scripts/provision_metabase.py`](../scripts/provision_metabase.py) now sets
 `visualization_settings` (`graph.dimensions` / `graph.metrics`) explicitly per
 card, keyed off the column names each query returns. Confirmed by re-running the
-provisioning script and re-capturing — every card renders a chart, not a picker.
+provisioning script and re-capturing, every card renders a chart, not a picker.
 
 The dashboard is also verified programmatically: the provisioning script
 confirms all eight cards were created and each returns rows (card 1: 91 rows,
 card 6: 10 rows, card 7: 7 rows). `make dashboard` rebuilds this exact instance
-from `sql/dashboard_questions.sql` on any machine in about 90 seconds — run it
+from `sql/dashboard_questions.sql` on any machine in about 90 seconds, run it
 and look at the real thing, rather than trusting a screenshot from one point in
 time.
+
+## Live findings page
+
+Metabase itself needs Docker running locally, so there is no way to give
+someone a link to *this* instance. As the next best thing,
+[`live_findings.html`](live_findings.html) is a self-contained static page
+with the same headline numbers (recovery curve, nudge lift, consistency
+distribution, day-of-week effect), hand-built as inline SVG against the same
+validated palette used everywhere else in the project. No chart library, no
+external requests, themed for light and dark.
+
+Published copy: **https://claude.ai/code/artifact/5cb37bd8-b34a-4b18-95da-ed53e3daa950**
+
+The numbers are a snapshot, not a live query, labelled as such on the page
+itself. To update it after a reseed, regenerate the figures in
+`reports/figures/` and edit the inline data arrays in
+`dashboards/live_findings.html` to match.
