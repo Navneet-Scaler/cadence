@@ -4,7 +4,8 @@
 
 Turns raw daily-investment transactions into streak health signals, finds where
 and why habits break, and tests whether an intervention actually changes the
-outcome. Built to be opened every morning, not presented once.
+outcome. Designed to run on a schedule (`scripts/run_weekly_report.sh` + cron)
+and refresh a live dashboard — not a one-off notebook.
 
 [![CI](https://github.com/Navneet-Scaler/cadence/actions/workflows/ci.yml/badge.svg)](https://github.com/Navneet-Scaler/cadence/actions/workflows/ci.yml)
 
@@ -119,7 +120,10 @@ The same logic is implemented twice — in SQL for production and in pandas for
 testability — and [`validate_against_sql`](src/analysis/streak_builder.py)
 asserts they agree on all **50,576 streaks**. A streak definition that drifts
 between the dashboard and the notebook is how two teams quote different numbers
-off one warehouse; here that drift is a test failure.
+off one warehouse; here that drift is a test failure, enforced in CI's
+`db-tests` job (which brings up Postgres, applies the schema, seeds data, and
+runs [`tests/test_streak_builder_db.py`](tests/test_streak_builder_db.py)), not
+just something you can run by hand.
 
 ### 2. Survival analysis — censoring is the whole point
 A streak still running when the data ends has **not** died. Treating it as dead
@@ -187,7 +191,7 @@ account-based definition and 36% under "actually invested that day".
 | [`src/analysis/`](src/analysis/) | Streaks, survival, cohorts, nudge, data quality |
 | [`src/reporting/`](src/reporting/) | Scheduled weekly report |
 | [`scripts/`](scripts/) | Cron wrapper, Metabase provisioning |
-| [`tests/`](tests/) | 101 tests, none needing a database |
+| [`tests/`](tests/) | 101 unit tests (no DB) + 1 DB-backed integration test, both run in CI |
 | [`MEMO.md`](MEMO.md) | **The one-page decision memo** |
 | [`ASSUMPTIONS.md`](ASSUMPTIONS.md) | What's real vs modelled |
 | [`data_quality_findings.md`](data_quality_findings.md) | 6 findings with fix DDL |
