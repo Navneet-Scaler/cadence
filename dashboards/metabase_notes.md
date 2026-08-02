@@ -120,15 +120,25 @@ time.
 
 Metabase itself needs Docker running locally, so there is no way to give
 someone a link to *this* instance. As the next best thing,
-[`docs/index.html`](../docs/index.html) is a self-contained static page
-with the same headline numbers (recovery curve, nudge lift, consistency
-distribution, day-of-week effect), hand-built as inline SVG against the same
-validated palette used everywhere else in the project. No chart library, no
-external requests, themed for light and dark.
+[`docs/index.html`](../docs/index.html) is a self-contained page covering
+the same ground as the dashboard, plus a replayable timeline of the year's
+daily active investors and a sampled event feed of real streak breaks,
+recoveries, and nudges. Every explanation has a Simple and an Advanced
+version, toggled from the page's own nav. No chart library, no external
+requests, themed for light and dark.
 
 Published copy, served by GitHub Pages straight from this repo: **https://navneet-scaler.github.io/cadence/**
 
-The numbers are a snapshot, not a live query, labelled as such on the page
-itself. To update it after a reseed, regenerate the figures in
-`reports/figures/` and edit the inline data arrays in
-`docs/index.html` to match, then push to `main`. GitHub Pages redeploys automatically.
+Unlike the earlier hand-typed version, the page is generated from the
+database by [`scripts/build_live_page.py`](../scripts/build_live_page.py):
+
+```bash
+make db-up && make run-sim && make streak   # if not already loaded
+python -m scripts.build_live_page            # writes docs/index.html
+```
+
+The numbers are a snapshot of that run, not a live query, labelled as such
+on the page itself. To refresh it after a reseed, run the script again and
+commit the result; there is no build step in CI, the committed file is what
+GitHub Pages serves. Push to `main` and the Pages workflow redeploys
+automatically.
