@@ -93,11 +93,25 @@ moves someone from the left cluster to the right one.
 Sunday's 696, a 39% weekend drop. Any campaign measured Monday-to-Monday will
 read very differently from one measured Thursday-to-Thursday.
 
-## On screenshots
+## Screenshot
 
-There is no screenshot embedded here. The dashboard is verified programmatically
-instead — the provisioning script confirms all eight cards were created and each
-one returns rows (card 1: 91 rows, card 6: 10 rows, card 7: 7 rows). A screenshot
-would show one moment of one instance; the script rebuilds the whole thing on any
-machine in about 90 seconds, which is the more useful artifact. Run
-`make dashboard` and look at the real thing.
+![Full Cadence dashboard, all eight cards](images/dashboard_full.png)
+
+Captured headlessly from a live, freshly-provisioned instance (temporary public
+link, revoked immediately after) — not a mockup, not a description of intent.
+
+Taking this screenshot caught a real bug: cards 3, 4, 6, and 7 initially
+rendered as an unconfigured "which fields do you want to use for the X and Y
+axes?" prompt instead of a chart. Native SQL questions have no GUI-built query
+for Metabase to infer axes from, so `upsert_card` in
+[`scripts/provision_metabase.py`](../scripts/provision_metabase.py) now sets
+`visualization_settings` (`graph.dimensions` / `graph.metrics`) explicitly per
+card, keyed off the column names each query returns. Confirmed by re-running the
+provisioning script and re-capturing — every card renders a chart, not a picker.
+
+The dashboard is also verified programmatically: the provisioning script
+confirms all eight cards were created and each returns rows (card 1: 91 rows,
+card 6: 10 rows, card 7: 7 rows). `make dashboard` rebuilds this exact instance
+from `sql/dashboard_questions.sql` on any machine in about 90 seconds — run it
+and look at the real thing, rather than trusting a screenshot from one point in
+time.

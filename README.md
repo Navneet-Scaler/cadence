@@ -30,6 +30,18 @@ good". Cadence measures that gap.
 
 ---
 
+## The dashboard
+
+![Cadence dashboard — daily active investors, streak length distribution, recovery rate by days missed, nudge effect, weekly cohort retention, consistency distribution, and day-of-week effect](dashboards/images/dashboard_hero.png)
+
+Live Metabase instance, screenshotted end to end — not a mockup. Full-height
+version and every card's SQL in
+[`dashboards/metabase_notes.md`](dashboards/metabase_notes.md) and
+[`sql/dashboard_questions.sql`](sql/dashboard_questions.sql). `make dashboard`
+rebuilds this exact instance from that SQL in about 90 seconds.
+
+---
+
 ## The answer
 
 **Nudge on day 5 of a lapse.**
