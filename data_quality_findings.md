@@ -8,9 +8,9 @@ in a notebook cell.
 Every finding below carries three things, because a bug report with only the
 first is work handed to someone else rather than work done:
 
-1. **What is wrong** — a detection query anyone can re-run.
-2. **What it costs** — blast radius in a metric someone cares about.
-3. **How to fix it** — the DDL or validation rule that prevents recurrence.
+1. **What is wrong**, a detection query anyone can re-run.
+2. **What it costs**, blast radius in a metric someone cares about.
+3. **How to fix it**, the DDL or validation rule that prevents recurrence.
 
 > **On the checks reading raw tables:** `v_clean_transactions` already
 > de-duplicates and drops pre-signup rows, so the *analysis* is protected from
@@ -18,7 +18,7 @@ first is work handed to someone else rather than work done:
 > clean bill of health on a database that still has the problem. The view
 > protects the analysis; these checks protect the ledger.
 
-## Summary — run of 2 Aug 2026, 373,387 raw transactions / 5,000 users
+## Summary: run of 2 Aug 2026, 373,387 raw transactions / 5,000 users
 
 | Code | Table | Issue | Severity | Rows | Status |
 |---|---|---|---|---|---|
@@ -34,7 +34,7 @@ flagging everything it looks at.
 
 ---
 
-## DQ-01 — NULL transaction amounts · **high**
+## DQ-01: NULL transaction amounts · **high**
 
 **5,593 rows (1.50% of all transactions), of which 5,342 have `status = 'success'`.**
 
@@ -46,7 +46,7 @@ are present and look successful.
 SELECT txn_id FROM sip_daily_transactions WHERE amount IS NULL;
 ```
 
-**Proposed fix** — backfill from the payment gateway ledger first, then:
+**Proposed fix**, backfill from the payment gateway ledger first, then:
 
 ```sql
 ALTER TABLE sip_daily_transactions ALTER COLUMN amount SET NOT NULL;
@@ -59,7 +59,7 @@ the application saying "I don't know how much" and persisting it anyway.
 
 ---
 
-## DQ-02 — Duplicate transactions for the same user-day · **high**
+## DQ-02: Duplicate transactions for the same user-day · **high**
 
 **3,697 duplicated user-days across 1,884 users (3,697 excess rows).**
 
@@ -69,7 +69,7 @@ Almost certainly a retried write with no idempotency key.
 the streak query identifies runs using `txn_date - ROW_NUMBER()`. A duplicate
 consumes an extra row number without advancing the date, so the difference shifts
 and **one real streak is shattered into several**. Left unhandled it would
-manufacture streak breaks that never happened — inflating churn and corrupting
+manufacture streak breaks that never happened, inflating churn and corrupting
 every survival estimate downstream.
 
 ```sql
@@ -79,7 +79,7 @@ GROUP BY user_id, txn_date
 HAVING COUNT(*) > 1;
 ```
 
-**Proposed fix** — de-duplicate keeping the earliest `created_at`, then:
+**Proposed fix**, de-duplicate keeping the earliest `created_at`, then:
 
 ```sql
 ALTER TABLE sip_daily_transactions
@@ -91,7 +91,7 @@ inserts.
 
 ---
 
-## DQ-03 — Transactions dated before signup · **medium**
+## DQ-03: Transactions dated before signup · **medium**
 
 **1,472 rows across 1,094 users, between 1 and 29 days before the account existed.**
 
@@ -107,19 +107,19 @@ JOIN users u ON u.user_id = t.user_id
 WHERE t.txn_date < u.signup_date;
 ```
 
-**Proposed fix** — stamp `txn_date` server-side from the settlement event rather
+**Proposed fix**, stamp `txn_date` server-side from the settlement event rather
 than the client payload. PostgreSQL cannot express a cross-table `CHECK`, so
 enforce with a trigger, or denormalise `signup_date` onto the transaction row and
 constrain it there.
 
 ---
 
-## DQ-04 — Undocumented status values · **high**
+## DQ-04: Undocumented status values · **high**
 
 **747 rows across 611 users, all with `status = 'SUCCESS'` (wrong case).**
 
 Every downstream query filters `status = 'success'`. A wrong-case value is
-therefore **invisible to the analysis while being a real contribution** — the
+therefore **invisible to the analysis while being a real contribution**, the
 user did invest, the ledger recorded it, and the streak builder counts it as a
 missed day. It manufactures phantom streak breaks in exactly the population that
 was behaving well.
@@ -129,7 +129,7 @@ SELECT txn_id FROM sip_daily_transactions
 WHERE status NOT IN ('success', 'failed', 'skipped');
 ```
 
-**Proposed fix** — normalise to lower case, then constrain:
+**Proposed fix**, normalise to lower case, then constrain:
 
 ```sql
 ALTER TABLE sip_daily_transactions
@@ -141,15 +141,15 @@ undocumented at write time instead of trusting every caller to spell it right.
 
 ---
 
-## DQ-05 — Users transacting without completed KYC · **high**
+## DQ-05: Users transacting without completed KYC · **high**
 
 **450 users with `kyc_status = 'pending'` and 34,323 successful transactions
 between them, totalling ₹10,74,196.**
 
 This is the one finding here that is **not merely a data defect**. Either:
 
-- the KYC gate is not enforced at the payment path — a compliance exposure, or
-- `kyc_status` is not updated on completion — a data defect with a clean fix.
+- the KYC gate is not enforced at the payment path, a compliance exposure, or
+- `kyc_status` is not updated on completion, a data defect with a clean fix.
 
 The two have completely different remediations and the data alone cannot
 distinguish them, so this needs a conversation with engineering rather than a
@@ -164,22 +164,22 @@ WHERE u.kyc_status <> 'verified' AND t.status = 'success'
 GROUP BY u.kyc_status;
 ```
 
-**Proposed fix** — determine which failure it is first. If the gate is missing,
+**Proposed fix**, determine which failure it is first. If the gate is missing,
 block at the payment service. If the status field is stale, make KYC completion
-write `kyc_status` and `kyc_completed_at` in one transaction — see DQ-06.
+write `kyc_status` and `kyc_completed_at` in one transaction, see DQ-06.
 
 ---
 
-## DQ-06 — `kyc_status` / `kyc_completed_at` disagreement · **medium** · ✅ passing
+## DQ-06: `kyc_status` / `kyc_completed_at` disagreement · **medium** · ✅ passing
 
 **0 rows.** No drift at present.
 
 The check is kept because the two fields encode one fact and are written
-separately, so they *can* drift — a verified user with no completion timestamp,
+separately, so they *can* drift, a verified user with no completion timestamp,
 or an unverified user carrying one. Any KYC-speed analysis (including the Cox
 covariate) becomes unreliable the moment they disagree, and the failure is silent.
 
-**Proposed fix (preventive)** — derive `kyc_status` from `kyc_completed_at` as a
+**Proposed fix (preventive)**, derive `kyc_status` from `kyc_completed_at` as a
 generated column, or write both in one transaction. Two columns encoding one fact
 will drift eventually.
 
@@ -200,5 +200,5 @@ ALTER TABLE sip_daily_transactions
 ```
 
 Note the ordering dependency: each requires its backfill or de-duplication to run
-first, or the `ALTER` fails against existing rows. That is a feature — it forces
+first, or the `ALTER` fails against existing rows. That is a feature, it forces
 the historical mess to be dealt with rather than fenced off.

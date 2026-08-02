@@ -1,0 +1,342 @@
+<title>Cadence — Live Findings</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface: #fcfcfb;
+    --surface-2: #f4f3f0;
+    --ink-1: #0b0b0b;
+    --ink-2: #52514e;
+    --ink-3: #8a8880;
+    --grid: #e4e3df;
+    --border: #e1e0d9;
+    --blue: #2a78d6;
+    --orange: #eb6834;
+    --green: #1baf7a;
+    --yellow: #eda100;
+    --good: #0ca30c;
+    --critical: #d03b3b;
+    --card-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 1px 8px rgba(0,0,0,0.03);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --surface: #17171a;
+      --surface-2: #202024;
+      --ink-1: #ffffff;
+      --ink-2: #c3c2b7;
+      --ink-3: #8a8880;
+      --grid: #2c2c2f;
+      --border: #2c2c2f;
+      --blue: #3987e5;
+      --orange: #d95926;
+      --green: #199e70;
+      --yellow: #c98500;
+      --good: #2fbf2f;
+      --critical: #e66767;
+      --card-shadow: 0 1px 2px rgba(0,0,0,0.3), 0 1px 8px rgba(0,0,0,0.2);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface: #17171a; --surface-2: #202024; --ink-1: #ffffff; --ink-2: #c3c2b7;
+    --ink-3: #8a8880; --grid: #2c2c2f; --border: #2c2c2f;
+    --blue: #3987e5; --orange: #d95926; --green: #199e70; --yellow: #c98500;
+    --good: #2fbf2f; --critical: #e66767;
+    --card-shadow: 0 1px 2px rgba(0,0,0,0.3), 0 1px 8px rgba(0,0,0,0.2);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--surface-2);
+    color: var(--ink-1);
+    font: 15px/1.5 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 40px 24px 80px; }
+
+  header.hero {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 36px 40px;
+    box-shadow: var(--card-shadow);
+    margin-bottom: 28px;
+  }
+  .eyebrow {
+    font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--blue); margin: 0 0 10px;
+  }
+  h1 { margin: 0 0 8px; font-size: 28px; letter-spacing: -0.01em; }
+  .lede { color: var(--ink-2); max-width: 640px; margin: 0 0 22px; }
+  .rec {
+    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+    padding: 18px 20px; background: var(--surface-2); border-radius: 12px;
+    border: 1px solid var(--border);
+  }
+  .rec .label { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); }
+  .rec .value { font-size: 22px; font-weight: 700; color: var(--ink-1); }
+  .rec .sub { color: var(--ink-2); font-size: 14px; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    padding: 22px 24px 18px; box-shadow: var(--card-shadow); margin-bottom: 20px;
+  }
+  .card h2 { font-size: 15px; margin: 0 0 2px; }
+  .card .desc { color: var(--ink-3); font-size: 12.5px; margin: 0 0 16px; }
+  .card.full { grid-column: 1 / -1; }
+
+  svg { width: 100%; height: auto; display: block; overflow: visible; }
+  .grid-line { stroke: var(--grid); stroke-width: 1; }
+  .axis-text { fill: var(--ink-3); font-size: 10.5px; }
+  .val-text { fill: var(--ink-2); font-size: 10.5px; font-weight: 600; }
+  .bar-label { fill: var(--ink-1); font-size: 11px; font-weight: 600; }
+
+  .legend { display: flex; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); }
+  .swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+  .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  @media (max-width: 700px) { .stat-row { grid-template-columns: repeat(2, 1fr); } }
+  .stat {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .stat .n { font-size: 22px; font-weight: 700; }
+  .stat .k { color: var(--ink-3); font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--ink-3); font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: .03em; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.highlight td { background: color-mix(in srgb, var(--blue) 10%, transparent); font-weight: 600; }
+
+  footer { text-align: center; color: var(--ink-3); font-size: 12.5px; margin-top: 32px; }
+  footer a { color: var(--blue); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+  .pill {
+    display: inline-block; font-size: 11px; padding: 3px 9px; border-radius: 999px;
+    background: var(--surface-2); border: 1px solid var(--border); color: var(--ink-2);
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="hero">
+    <p class="eyebrow">Cadence &middot; Live Findings Snapshot</p>
+    <h1>Where the daily SIP habit breaks, and what to do about it</h1>
+    <p class="lede">
+      5,000 simulated users, 373,387 transactions, 50,576 streaks, 12 months.
+      Full pipeline, code, and one-page memo in the
+      <a href="https://github.com/Navneet-Scaler/cadence" style="color:var(--blue)">GitHub repository</a>.
+    </p>
+    <div class="rec">
+      <span class="label">Recommendation</span>
+      <span class="value">Fire the retention nudge on day 5 of a lapse</span>
+      <span class="sub">+7.7pp recovery, 13 sends per recovered user, vs 26&ndash;27 on every other trigger day</span>
+    </div>
+  </header>
+
+  <div class="card full">
+    <h2>Recovery collapses between day 3 and day 7</h2>
+    <p class="desc">Conditional probability a lapsed user returns within 30 days, by how many days they have already missed. Computed from a censoring-aware Kaplan&ndash;Meier fit, not a raw row count.</p>
+    <svg viewBox="0 0 900 260" id="chart-recovery"></svg>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Nudge lift by trigger day</h2>
+      <p class="desc">Lift in 30-day recovery vs a matched control, risk-set adjusted, Holm&ndash;Bonferroni corrected.</p>
+      <svg viewBox="0 0 420 240" id="chart-nudge"></svg>
+    </div>
+
+    <div class="card">
+      <h2>Consistency is bimodal</h2>
+      <p class="desc">Share of days since signup each user actually invested. No meaningful middle.</p>
+      <svg viewBox="0 0 420 240" id="chart-consistency"></svg>
+    </div>
+  </div>
+
+  <div class="card full">
+    <h2>Day-of-week effect</h2>
+    <p class="desc">Average daily active investors by weekday. Friday runs 39% above Sunday.</p>
+    <svg viewBox="0 0 900 200" id="chart-dow"></svg>
+  </div>
+
+  <div class="card full">
+    <h2>What each trigger day is worth</h2>
+    <table>
+      <thead>
+        <tr><th>Nudge fired on</th><th class="num">Lift</th><th class="num">95% CI</th><th class="num">Sends per recovery</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Day 1</td><td class="num">+3.7pp</td><td class="num">[2.98, 4.36]</td><td class="num">27.3</td></tr>
+        <tr><td>Day 2</td><td class="num">+3.8pp</td><td class="num">[3.08, 4.48]</td><td class="num">26.4</td></tr>
+        <tr><td>Day 3</td><td class="num">+3.6pp</td><td class="num">[2.50, 4.67]</td><td class="num">27.9</td></tr>
+        <tr class="highlight"><td>Day 5</td><td class="num">+7.7pp</td><td class="num">[5.70, 9.75]</td><td class="num">12.9</td></tr>
+        <tr><td>Day 7</td><td class="num">+4.1pp</td><td class="num">[0.62, 7.50]</td><td class="num">24.6</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="stat-row">
+    <div class="stat"><div class="n">50,576</div><div class="k">Streaks analysed</div></div>
+    <div class="stat"><div class="n">~660</div><div class="k">Extra users/yr recovered</div></div>
+    <div class="stat"><div class="n">1.18&times;</div><div class="k">1st-streak break hazard</div></div>
+    <div class="stat"><div class="n">36%</div><div class="k">True D30 retention</div></div>
+  </div>
+
+  <footer>
+    <span class="pill">Snapshot, simulated data</span>
+    &nbsp;&middot;&nbsp;
+    Numbers regenerate from a fixed seed via <code>make all</code>.
+    Full reasoning in
+    <a href="https://github.com/Navneet-Scaler/cadence/blob/main/MEMO.md">MEMO.md</a>
+    and
+    <a href="https://github.com/Navneet-Scaler/cadence/blob/main/ASSUMPTIONS.md">ASSUMPTIONS.md</a>.
+  </footer>
+
+</div>
+
+<script>
+(function () {
+  const css = getComputedStyle(document.documentElement);
+  const v = (name) => css.getPropertyValue(name).trim();
+
+  function axis(svg, x0, x1, y0, y1) {
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", x0); line.setAttribute("x2", x1);
+    line.setAttribute("y1", y0); line.setAttribute("y2", y1);
+    line.setAttribute("class", "grid-line");
+    svg.appendChild(line);
+  }
+  function text(svg, x, y, s, cls, anchor) {
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    t.setAttribute("x", x); t.setAttribute("y", y);
+    t.setAttribute("class", cls);
+    t.setAttribute("text-anchor", anchor || "middle");
+    t.textContent = s;
+    svg.appendChild(t);
+  }
+  function rect(svg, x, y, w, h, fill, rx) {
+    const r = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    r.setAttribute("x", x); r.setAttribute("y", y);
+    r.setAttribute("width", w); r.setAttribute("height", h);
+    r.setAttribute("fill", fill);
+    r.setAttribute("rx", rx || 3);
+    svg.appendChild(r);
+  }
+
+  function barChart(id, data, opts) {
+    const svg = document.getElementById(id);
+    const W = svg.viewBox.baseVal.width, H = svg.viewBox.baseVal.height;
+    const padL = opts.padL || 40, padB = 34, padT = 10, padR = opts.padR || 10;
+    const plotW = W - padL - padR, plotH = H - padT - padB;
+    const maxV = opts.max || Math.max(...data.map(d => d.v)) * 1.15;
+    const n = data.length;
+    const bw = (plotW / n) * (opts.bwFrac || 0.55);
+    const gap = plotW / n;
+
+    [0, 0.25, 0.5, 0.75, 1].forEach(f => {
+      const y = padT + plotH * (1 - f);
+      axis(svg, padL, W - padR, y, y);
+      text(svg, padL - 8, y + 3, opts.fmtY ? opts.fmtY(maxV * f) : Math.round(maxV * f), "axis-text", "end");
+    });
+
+    data.forEach((d, i) => {
+      const cx = padL + gap * i + gap / 2;
+      const h = (d.v / maxV) * plotH;
+      const y = padT + plotH - h;
+      rect(svg, cx - bw / 2, y, bw, h, d.color || v("--blue"), 4);
+      text(svg, cx, y - 6, opts.fmtV ? opts.fmtV(d.v) : d.v, "val-text");
+      text(svg, cx, H - padB + 16, d.label, "axis-text");
+      if (d.emph) {
+        text(svg, cx, H - padB + 30, d.emph, "bar-label");
+      }
+    });
+  }
+
+  function lineChart(id, data, opts) {
+    const svg = document.getElementById(id);
+    const W = svg.viewBox.baseVal.width, H = svg.viewBox.baseVal.height;
+    const padL = 42, padB = 30, padT = 14, padR = 16;
+    const plotW = W - padL - padR, plotH = H - padT - padB;
+    const maxV = 100;
+    const xs = data.map(d => d.x);
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+
+    [0, 25, 50, 75, 100].forEach(f => {
+      const y = padT + plotH * (1 - f / 100);
+      axis(svg, padL, W - padR, y, y);
+      text(svg, padL - 8, y + 3, f + "%", "axis-text", "end");
+    });
+
+    const pts = data.map(d => {
+      const x = padL + ((d.x - minX) / (maxX - minX)) * plotW;
+      const y = padT + plotH * (1 - d.v / maxV);
+      return [x, y, d];
+    });
+
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", pts.map((p, i) => (i === 0 ? "M" : "L") + p[0] + " " + p[1]).join(" "));
+    path.setAttribute("fill", "none");
+    path.setAttribute("stroke", v("--blue"));
+    path.setAttribute("stroke-width", "3");
+    path.setAttribute("stroke-linecap", "round");
+    path.setAttribute("stroke-linejoin", "round");
+    svg.appendChild(path);
+
+    pts.forEach(([x, y, d]) => {
+      const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      dot.setAttribute("cx", x); dot.setAttribute("cy", y); dot.setAttribute("r", d.emph ? 6 : 4);
+      dot.setAttribute("fill", d.emph ? v("--orange") : v("--blue"));
+      dot.setAttribute("stroke", v("--surface"));
+      dot.setAttribute("stroke-width", "2");
+      svg.appendChild(dot);
+      text(svg, x, y - 12, d.v + "%", "val-text");
+      text(svg, x, H - padB + 18, "Day " + d.x, "axis-text");
+    });
+  }
+
+  lineChart("chart-recovery", [
+    { x: 1, v: 93 },
+    { x: 3, v: 84 },
+    { x: 5, v: 69, emph: true },
+    { x: 7, v: 51 },
+    { x: 14, v: 20 },
+  ]);
+
+  barChart("chart-nudge", [
+    { label: "1", v: 3.7, color: v("--ink-3") },
+    { label: "2", v: 3.8, color: v("--ink-3") },
+    { label: "3", v: 3.6, color: v("--ink-3") },
+    { label: "5", v: 7.7, color: v("--orange"), emph: "best" },
+    { label: "7", v: 4.1, color: v("--ink-3") },
+  ], { max: 9, fmtV: (n) => "+" + n.toFixed(1) });
+
+  barChart("chart-consistency", [
+    { label: "10%", v: 2435, color: v("--blue") },
+    { label: "20%", v: 477, color: v("--blue") },
+    { label: "30%", v: 286, color: v("--blue") },
+    { label: "40%", v: 206, color: v("--blue") },
+    { label: "50%", v: 188, color: v("--blue") },
+    { label: "60%", v: 116, color: v("--blue") },
+    { label: "70%", v: 78, color: v("--blue") },
+    { label: "80%", v: 173, color: v("--blue") },
+    { label: "90%", v: 834, color: v("--green") },
+    { label: "100%", v: 207, color: v("--green") },
+  ], { max: 2600, fmtV: (n) => n >= 1000 ? (n/1000).toFixed(1) + "k" : n, bwFrac: 0.65 });
+
+  barChart("chart-dow", [
+    { label: "Mon", v: 947, color: v("--blue") },
+    { label: "Tue", v: 1058, color: v("--blue") },
+    { label: "Wed", v: 1091, color: v("--blue") },
+    { label: "Thu", v: 1112, color: v("--blue") },
+    { label: "Fri", v: 1145, color: v("--blue") },
+    { label: "Sat", v: 794, color: v("--yellow") },
+    { label: "Sun", v: 696, color: v("--yellow") },
+  ], { max: 1300, padR: 16 });
+})();
+</script>
