@@ -1,342 +1,764 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cadence: Live Findings</title>
+<meta name="description" content="Where the daily SIP habit breaks, and what to do about it: a replayable, statistically-annotated tour of the Cadence retention engine.">
 <style>
-  :root {
-    color-scheme: light;
-    --surface: #fcfcfb;
-    --surface-2: #f4f3f0;
-    --ink-1: #0b0b0b;
-    --ink-2: #52514e;
-    --ink-3: #8a8880;
-    --grid: #e4e3df;
-    --border: #e1e0d9;
-    --blue: #2a78d6;
-    --orange: #eb6834;
-    --green: #1baf7a;
-    --yellow: #eda100;
-    --good: #0ca30c;
-    --critical: #d03b3b;
-    --card-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 1px 8px rgba(0,0,0,0.03);
+:root{
+  color-scheme:light;
+  --surface:#fcfcfb; --surface-2:#f3f2ef; --surface-3:#eae9e4;
+  --ink-1:#0b0b0b; --ink-2:#4a4944; --ink-3:#88867d;
+  --border:#e2e0d8; --border-strong:#cfcdc2;
+  --blue:#2a78d6; --orange:#eb6834; --green:#1baf7a; --yellow:#c98500; --violet:#4a3aa7; --red:#d03b3b;
+  --good:#0ca30c; --critical:#d03b3b;
+  --shadow:0 1px 2px rgba(20,20,10,.05),0 6px 20px rgba(20,20,10,.05);
+  --shadow-lg:0 8px 30px rgba(20,20,10,.10);
+  --radius:16px;
+  --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root:where(:not([data-theme="light"])){
+    color-scheme:dark;
+    --surface:#111113; --surface-2:#18181b; --surface-3:#212124;
+    --ink-1:#f5f5f3; --ink-2:#b7b5ab; --ink-3:#7d7b73;
+    --border:#28282b; --border-strong:#37373b;
+    --blue:#4a91ea; --orange:#e2763f; --green:#25b381; --yellow:#d69a2b; --violet:#8b7ce8; --red:#e2645f;
+    --good:#3fcf5f; --critical:#e2645f;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.35);
+    --shadow-lg:0 12px 40px rgba(0,0,0,.5);
   }
-  @media (prefers-color-scheme: dark) {
-    :root:where(:not([data-theme="light"])) {
-      color-scheme: dark;
-      --surface: #17171a;
-      --surface-2: #202024;
-      --ink-1: #ffffff;
-      --ink-2: #c3c2b7;
-      --ink-3: #8a8880;
-      --grid: #2c2c2f;
-      --border: #2c2c2f;
-      --blue: #3987e5;
-      --orange: #d95926;
-      --green: #199e70;
-      --yellow: #c98500;
-      --good: #2fbf2f;
-      --critical: #e66767;
-      --card-shadow: 0 1px 2px rgba(0,0,0,0.3), 0 1px 8px rgba(0,0,0,0.2);
-    }
-  }
-  :root[data-theme="dark"] {
-    color-scheme: dark;
-    --surface: #17171a; --surface-2: #202024; --ink-1: #ffffff; --ink-2: #c3c2b7;
-    --ink-3: #8a8880; --grid: #2c2c2f; --border: #2c2c2f;
-    --blue: #3987e5; --orange: #d95926; --green: #199e70; --yellow: #c98500;
-    --good: #2fbf2f; --critical: #e66767;
-    --card-shadow: 0 1px 2px rgba(0,0,0,0.3), 0 1px 8px rgba(0,0,0,0.2);
-  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --surface:#111113; --surface-2:#18181b; --surface-3:#212124;
+  --ink-1:#f5f5f3; --ink-2:#b7b5ab; --ink-3:#7d7b73;
+  --border:#28282b; --border-strong:#37373b;
+  --blue:#4a91ea; --orange:#e2763f; --green:#25b381; --yellow:#d69a2b; --violet:#8b7ce8; --red:#e2645f;
+  --good:#3fcf5f; --critical:#e2645f;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.35);
+  --shadow-lg:0 12px 40px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--surface-2);color:var(--ink-1);font:15px/1.6 var(--sans);
+  -webkit-font-smoothing:antialiased;overflow-x:hidden}
+::selection{background:color-mix(in srgb,var(--blue) 30%,transparent)}
+a{color:var(--blue)}
+code,.mono{font-family:var(--mono)}
+.wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+section{scroll-margin-top:76px}
 
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    background: var(--surface-2);
-    color: var(--ink-1);
-    font: 15px/1.5 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
-  }
-  .wrap { max-width: 1080px; margin: 0 auto; padding: 40px 24px 80px; }
+/* ---------- nav ---------- */
+nav.top{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px) saturate(1.4);
+  background:color-mix(in srgb,var(--surface) 78%,transparent);border-bottom:1px solid var(--border)}
+nav.top .row{display:flex;align-items:center;gap:6px;height:56px;max-width:1180px;margin:0 auto;padding:0 24px}
+.brand{font-weight:800;font-size:15px;letter-spacing:-.02em;margin-right:10px;white-space:nowrap;display:flex;align-items:center;gap:8px}
+.brand .dot{width:8px;height:8px;border-radius:50%;background:var(--orange);animation:pulse 2s ease-in-out infinite}
+nav.top .links{display:flex;gap:2px;flex:1;overflow-x:auto}
+nav.top .links a{color:var(--ink-2);text-decoration:none;font-size:13px;font-weight:600;padding:8px 12px;
+  border-radius:8px;white-space:nowrap;transition:.15s}
+nav.top .links a:hover{color:var(--ink-1);background:var(--surface-3)}
+.level-toggle{display:flex;border:1px solid var(--border-strong);border-radius:8px;overflow:hidden;flex-shrink:0}
+.level-toggle button{background:var(--surface);border:0;color:var(--ink-3);font:600 11.5px var(--sans);
+  padding:7px 12px;cursor:pointer;letter-spacing:.02em}
+.level-toggle button.active{background:var(--ink-1);color:var(--surface)}
+.gh-link{margin-left:8px;color:var(--ink-2);flex-shrink:0}
+.gh-link svg{width:20px;height:20px;display:block}
 
-  header.hero {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 36px 40px;
-    box-shadow: var(--card-shadow);
-    margin-bottom: 28px;
-  }
-  .eyebrow {
-    font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
-    color: var(--blue); margin: 0 0 10px;
-  }
-  h1 { margin: 0 0 8px; font-size: 28px; letter-spacing: -0.01em; }
-  .lede { color: var(--ink-2); max-width: 640px; margin: 0 0 22px; }
-  .rec {
-    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
-    padding: 18px 20px; background: var(--surface-2); border-radius: 12px;
-    border: 1px solid var(--border);
-  }
-  .rec .label { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); }
-  .rec .value { font-size: 22px; font-weight: 700; color: var(--ink-1); }
-  .rec .sub { color: var(--ink-2); font-size: 14px; }
+@keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 0 0 color-mix(in srgb,var(--orange) 55%,transparent)}
+  50%{opacity:.55;box-shadow:0 0 0 5px transparent}}
 
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+/* ---------- hero ---------- */
+header.hero{padding:64px 0 44px}
+.eyebrow{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:700;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--blue);background:color-mix(in srgb,var(--blue) 12%,transparent);
+  padding:5px 12px;border-radius:999px;margin-bottom:18px}
+h1{margin:0 0 14px;font-size:clamp(28px,4vw,42px);letter-spacing:-.025em;line-height:1.12;max-width:760px}
+.lede{color:var(--ink-2);max-width:620px;font-size:16px;margin:0 0 26px}
+.hero-actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:34px}
+.btn{display:inline-flex;align-items:center;gap:8px;font:600 14px var(--sans);padding:11px 18px;border-radius:10px;
+  text-decoration:none;border:1px solid transparent;transition:.15s;cursor:pointer}
+.btn-primary{background:var(--ink-1);color:var(--surface)}
+.btn-primary:hover{opacity:.85}
+.btn-ghost{background:var(--surface);border-color:var(--border-strong);color:var(--ink-1)}
+.btn-ghost:hover{background:var(--surface-3)}
 
-  .card {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
-    padding: 22px 24px 18px; box-shadow: var(--card-shadow); margin-bottom: 20px;
-  }
-  .card h2 { font-size: 15px; margin: 0 0 2px; }
-  .card .desc { color: var(--ink-3); font-size: 12.5px; margin: 0 0 16px; }
-  .card.full { grid-column: 1 / -1; }
+.rec-card{display:flex;gap:18px;align-items:flex-start;padding:22px 24px;background:linear-gradient(135deg,
+  color-mix(in srgb,var(--orange) 9%,var(--surface)),var(--surface));border:1px solid var(--border);
+  border-radius:var(--radius);box-shadow:var(--shadow);max-width:720px}
+.rec-icon{flex-shrink:0;width:44px;height:44px;border-radius:12px;background:var(--orange);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800}
+.rec-card .label{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3);font-weight:700;margin-bottom:4px}
+.rec-card .headline{font-size:17px;font-weight:700;margin-bottom:6px;line-height:1.35}
+.rec-card .sub{color:var(--ink-2);font-size:13.5px}
 
-  svg { width: 100%; height: auto; display: block; overflow: visible; }
-  .grid-line { stroke: var(--grid); stroke-width: 1; }
-  .axis-text { fill: var(--ink-3); font-size: 10.5px; }
-  .val-text { fill: var(--ink-2); font-size: 10.5px; font-weight: 600; }
-  .bar-label { fill: var(--ink-1); font-size: 11px; font-weight: 600; }
+/* ---------- kpi strip ---------- */
+.kpi-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:34px 0 0}
+@media (max-width:760px){.kpi-strip{grid-template-columns:repeat(2,1fr)}}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 20px;box-shadow:var(--shadow)}
+.kpi .n{font-family:var(--mono);font-size:26px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.kpi .k{color:var(--ink-3);font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;margin-top:4px;font-weight:600}
 
-  .legend { display: flex; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
-  .legend span { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); }
-  .swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+/* ---------- generic section shell ---------- */
+.section-head{display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin:0 0 6px;flex-wrap:wrap}
+.section-head h2{font-size:22px;margin:0;letter-spacing:-.015em}
+.section-tag{font-family:var(--mono);font-size:11px;color:var(--ink-3);background:var(--surface-3);
+  padding:3px 9px;border-radius:6px}
+.section-sub{color:var(--ink-2);font-size:14px;max-width:680px;margin:0 0 26px}
+.section-pad{padding:60px 0}
+.section-pad.alt{background:var(--surface);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
 
-  .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
-  @media (max-width: 700px) { .stat-row { grid-template-columns: repeat(2, 1fr); } }
-  .stat {
-    background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
-    padding: 14px 16px;
-  }
-  .stat .n { font-size: 22px; font-weight: 700; }
-  .stat .k { color: var(--ink-3); font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:24px 26px 20px;box-shadow:var(--shadow)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media (max-width:820px){.grid2{grid-template-columns:1fr}}
+.card h3{font-size:15px;margin:0 0 3px}
+.card .desc{color:var(--ink-3);font-size:12.5px;margin:0 0 16px;line-height:1.5}
 
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
-  th { color: var(--ink-3); font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: .03em; }
-  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-  tr.highlight td { background: color-mix(in srgb, var(--blue) 10%, transparent); font-weight: 600; }
+/* explain toggle content */
+.lvl-advanced{display:none}
+body.mode-advanced .lvl-advanced{display:block}
+body.mode-advanced .lvl-simple{display:none}
+.explain{margin-top:14px;padding-top:14px;border-top:1px dashed var(--border)}
+.explain p{margin:0 0 8px;font-size:13px;color:var(--ink-2);line-height:1.6}
+.explain code{background:var(--surface-3);padding:1px 6px;border-radius:5px;font-size:12px}
+.explain .formula{display:block;background:var(--surface-3);padding:10px 14px;border-radius:8px;
+  font-family:var(--mono);font-size:12.5px;margin:8px 0;color:var(--ink-1);overflow-x:auto;white-space:pre}
 
-  footer { text-align: center; color: var(--ink-3); font-size: 12.5px; margin-top: 32px; }
-  footer a { color: var(--blue); text-decoration: none; }
-  footer a:hover { text-decoration: underline; }
-  .pill {
-    display: inline-block; font-size: 11px; padding: 3px 9px; border-radius: 999px;
-    background: var(--surface-2); border: 1px solid var(--border); color: var(--ink-2);
-  }
+svg.chart{width:100%;height:auto;display:block;overflow:visible}
+.grid-line{stroke:var(--border);stroke-width:1}
+.axis-text{fill:var(--ink-3);font-size:10.5px;font-family:var(--sans)}
+.val-text{fill:var(--ink-2);font-size:10.5px;font-weight:700;font-family:var(--sans)}
+.legend{display:flex;gap:16px;margin-bottom:14px;flex-wrap:wrap}
+.legend span{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2)}
+.swatch{width:10px;height:10px;border-radius:3px;display:inline-block}
+
+/* ---------- live replay ---------- */
+.replay-shell{background:var(--surface);border:1px solid var(--border);border-radius:20px;box-shadow:var(--shadow-lg);
+  overflow:hidden}
+.replay-top{display:flex;align-items:center;justify-content:space-between;padding:16px 22px;border-bottom:1px solid var(--border);
+  flex-wrap:wrap;gap:10px}
+.live-badge{display:inline-flex;align-items:center;gap:7px;font:700 11px var(--sans);letter-spacing:.06em;
+  text-transform:uppercase;color:var(--critical)}
+.live-badge .dot{width:7px;height:7px;border-radius:50%;background:var(--critical);animation:pulse 1.6s ease-in-out infinite}
+.replay-date{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--ink-1)}
+.replay-controls{display:flex;align-items:center;gap:8px}
+.icon-btn{width:34px;height:34px;border-radius:9px;border:1px solid var(--border-strong);background:var(--surface);
+  color:var(--ink-1);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:.15s}
+.icon-btn:hover{background:var(--surface-3)}
+.icon-btn svg{width:15px;height:15px}
+.speed-group{display:flex;border:1px solid var(--border-strong);border-radius:9px;overflow:hidden}
+.speed-group button{background:var(--surface);border:0;border-right:1px solid var(--border);color:var(--ink-3);
+  font:700 11px var(--mono);padding:8px 10px;cursor:pointer}
+.speed-group button:last-child{border-right:0}
+.speed-group button.active{background:var(--ink-1);color:var(--surface)}
+.replay-body{display:grid;grid-template-columns:1.5fr 1fr;min-height:360px}
+@media (max-width:860px){.replay-body{grid-template-columns:1fr}}
+.replay-chart{padding:20px 22px}
+.replay-kpis{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.replay-kpi{background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+.replay-kpi .n{font-family:var(--mono);font-weight:700;font-size:17px;font-variant-numeric:tabular-nums}
+.replay-kpi .k{font-size:10px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em}
+.scrub{width:100%;accent-color:var(--orange);margin-top:4px}
+.feed-panel{border-left:1px solid var(--border);background:var(--surface-2);display:flex;flex-direction:column;max-height:460px}
+.feed-head{padding:12px 18px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--ink-3);border-bottom:1px solid var(--border)}
+.feed-list{overflow-y:auto;flex:1;padding:6px 0}
+.feed-item{display:flex;gap:10px;align-items:flex-start;padding:9px 18px;font-size:12.5px;
+  animation:slideIn .35s ease-out}
+@keyframes slideIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+.feed-icon{width:22px;height:22px;border-radius:7px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:800;color:#fff;margin-top:1px}
+.feed-icon.recovered{background:var(--good)}
+.feed-icon.lapsed{background:var(--ink-3)}
+.feed-icon.nudge{background:var(--orange)}
+.feed-text b{color:var(--ink-1)}
+.feed-text{color:var(--ink-2);line-height:1.4}
+.feed-time{color:var(--ink-3);font-family:var(--mono);font-size:10.5px;margin-left:auto;flex-shrink:0;padding-top:2px}
+.feed-list::-webkit-scrollbar{width:6px}
+.feed-list::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:3px}
+.feed-empty{padding:30px 18px;color:var(--ink-3);font-size:12.5px;text-align:center}
+
+/* ---------- tables ---------- */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--border)}
+th{color:var(--ink-3);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.03em;
+  position:sticky;top:0;background:var(--surface)}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--mono)}
+tr.highlight td{background:color-mix(in srgb,var(--orange) 10%,transparent);font-weight:700}
+.table-scroll{max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:12px}
+.table-scroll table{margin:0}
+.table-scroll thead th{border-bottom:1px solid var(--border)}
+
+/* ---------- quality grid ---------- */
+.quality-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media (max-width:820px){.quality-grid{grid-template-columns:1fr 1fr}}
+@media (max-width:560px){.quality-grid{grid-template-columns:1fr}}
+.q-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow)}
+.q-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.q-code{font-family:var(--mono);font-weight:800;font-size:13px}
+.chip{font-size:10px;font-weight:800;padding:3px 9px;border-radius:999px;text-transform:uppercase;letter-spacing:.03em}
+.chip.fail{background:color-mix(in srgb,var(--critical) 18%,transparent);color:var(--critical)}
+.chip.pass{background:color-mix(in srgb,var(--good) 18%,transparent);color:var(--good)}
+.q-title{font-size:13px;font-weight:700;margin-bottom:4px}
+.q-detail{font-size:12px;color:var(--ink-2);line-height:1.5}
+.q-rows{font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-top:8px}
+
+footer{padding:50px 0 70px;text-align:center;color:var(--ink-3);font-size:12.5px;border-top:1px solid var(--border)}
+footer a{color:var(--ink-2);text-decoration:none;font-weight:600}
+footer a:hover{color:var(--blue)}
+.foot-links{display:flex;gap:18px;justify-content:center;margin-bottom:14px;flex-wrap:wrap}
+.snapshot-pill{display:inline-block;font-size:11px;padding:4px 10px;border-radius:999px;background:var(--surface-2);
+  border:1px solid var(--border);color:var(--ink-2);margin-bottom:10px}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+.reveal{animation:fadeUp .6s ease both}
+@media (prefers-reduced-motion:reduce){.reveal{animation:none}}
+.reveal.in{opacity:1;transform:translateY(0)}
 </style>
+</head>
+<body class="mode-simple">
+
+<nav class="top">
+  <div class="row">
+    <div class="brand"><span class="dot"></span>Cadence</div>
+    <div class="links">
+      <a href="#replay">Live Replay</a>
+      <a href="#survival">Survival</a>
+      <a href="#cohorts">Cohorts</a>
+      <a href="#experiment">Experiment</a>
+      <a href="#quality">Data Quality</a>
+    </div>
+    <div class="level-toggle" role="group" aria-label="Explanation depth">
+      <button data-level="simple" class="active">Simple</button>
+      <button data-level="advanced">Advanced</button>
+    </div>
+    <a class="gh-link" href="https://github.com/Navneet-Scaler/cadence" aria-label="GitHub repository" target="_blank" rel="noopener">
+      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
+      0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72
+      1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0
+      0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08
+      2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01
+      8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+    </a>
+  </div>
+</nav>
 
 <div class="wrap">
-
   <header class="hero">
-    <p class="eyebrow">Cadence &middot; Live Findings Snapshot</p>
+    <span class="eyebrow">Cadence &middot; live findings snapshot</span>
     <h1>Where the daily SIP habit breaks, and what to do about it</h1>
-    <p class="lede">
-      5,000 simulated users, 373,387 transactions, 50,576 streaks, 12 months.
-      Full pipeline, code, and one-page memo in the
-      <a href="https://github.com/Navneet-Scaler/cadence" style="color:var(--blue)">GitHub repository</a>.
-    </p>
-    <div class="rec">
-      <span class="label">Recommendation</span>
-      <span class="value">Fire the retention nudge on day 5 of a lapse</span>
-      <span class="sub">+7.7pp recovery, 13 sends per recovered user, vs 26&ndash;27 on every other trigger day</span>
+    <p class="lede">A replayable, statistically-annotated tour of the retention engine behind Cadence.
+      5,000 simulated users, 373,387 transactions, 50,576 streaks, 12 months of daily investing behaviour.
+      Toggle <b>Simple / Advanced</b> above to control how deep each explanation goes.</p>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="#replay">Watch the year replay &rarr;</a>
+      <a class="btn btn-ghost" href="https://github.com/Navneet-Scaler/cadence/blob/main/MEMO.md" target="_blank" rel="noopener">Read the memo</a>
+      <a class="btn btn-ghost" href="https://github.com/Navneet-Scaler/cadence" target="_blank" rel="noopener">View source</a>
+    </div>
+    <div class="rec-card">
+      <div class="rec-icon">5</div>
+      <div>
+        <div class="label">Recommendation</div>
+        <div class="headline">Fire the retention nudge on day 5 of a lapse, not day 1</div>
+        <div class="sub">+7.7pp recovery (95% CI 5.70&ndash;9.75), 13 sends per recovered user vs 26&ndash;27 on every other trigger day</div>
+      </div>
+    </div>
+
+    <div class="kpi-strip">
+      <div class="kpi"><div class="n" data-count="5000">0</div><div class="k">Users simulated</div></div>
+      <div class="kpi"><div class="n" data-count="373387">0</div><div class="k">Transactions</div></div>
+      <div class="kpi"><div class="n" data-count="50576">0</div><div class="k">Streaks analysed</div></div>
+      <div class="kpi"><div class="n" data-count="660">0</div><div class="k">Extra recoveries/yr at day 5</div></div>
     </div>
   </header>
-
-  <div class="card full">
-    <h2>Recovery collapses between day 3 and day 7</h2>
-    <p class="desc">Conditional probability a lapsed user returns within 30 days, by how many days they have already missed. Computed from a censoring-aware Kaplan&ndash;Meier fit, not a raw row count.</p>
-    <svg viewBox="0 0 900 260" id="chart-recovery"></svg>
-  </div>
-
-  <div class="grid">
-    <div class="card">
-      <h2>Nudge lift by trigger day</h2>
-      <p class="desc">Lift in 30-day recovery vs a matched control, risk-set adjusted, Holm&ndash;Bonferroni corrected.</p>
-      <svg viewBox="0 0 420 240" id="chart-nudge"></svg>
-    </div>
-
-    <div class="card">
-      <h2>Consistency is bimodal</h2>
-      <p class="desc">Share of days since signup each user actually invested. No meaningful middle.</p>
-      <svg viewBox="0 0 420 240" id="chart-consistency"></svg>
-    </div>
-  </div>
-
-  <div class="card full">
-    <h2>Day-of-week effect</h2>
-    <p class="desc">Average daily active investors by weekday. Friday runs 39% above Sunday.</p>
-    <svg viewBox="0 0 900 200" id="chart-dow"></svg>
-  </div>
-
-  <div class="card full">
-    <h2>What each trigger day is worth</h2>
-    <table>
-      <thead>
-        <tr><th>Nudge fired on</th><th class="num">Lift</th><th class="num">95% CI</th><th class="num">Sends per recovery</th></tr>
-      </thead>
-      <tbody>
-        <tr><td>Day 1</td><td class="num">+3.7pp</td><td class="num">[2.98, 4.36]</td><td class="num">27.3</td></tr>
-        <tr><td>Day 2</td><td class="num">+3.8pp</td><td class="num">[3.08, 4.48]</td><td class="num">26.4</td></tr>
-        <tr><td>Day 3</td><td class="num">+3.6pp</td><td class="num">[2.50, 4.67]</td><td class="num">27.9</td></tr>
-        <tr class="highlight"><td>Day 5</td><td class="num">+7.7pp</td><td class="num">[5.70, 9.75]</td><td class="num">12.9</td></tr>
-        <tr><td>Day 7</td><td class="num">+4.1pp</td><td class="num">[0.62, 7.50]</td><td class="num">24.6</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div class="stat-row">
-    <div class="stat"><div class="n">50,576</div><div class="k">Streaks analysed</div></div>
-    <div class="stat"><div class="n">~660</div><div class="k">Extra users/yr recovered</div></div>
-    <div class="stat"><div class="n">1.18&times;</div><div class="k">1st-streak break hazard</div></div>
-    <div class="stat"><div class="n">36%</div><div class="k">True D30 retention</div></div>
-  </div>
-
-  <footer>
-    <span class="pill">Snapshot, simulated data</span>
-    &nbsp;&middot;&nbsp;
-    Numbers regenerate from a fixed seed via <code>make all</code>.
-    Full reasoning in
-    <a href="https://github.com/Navneet-Scaler/cadence/blob/main/MEMO.md">MEMO.md</a>
-    and
-    <a href="https://github.com/Navneet-Scaler/cadence/blob/main/ASSUMPTIONS.md">ASSUMPTIONS.md</a>.
-  </footer>
-
 </div>
 
+<div class="wrap section-pad" id="replay">
+  <div class="section-head"><h2>Watch the habit form, day by day</h2><span class="section-tag">replay</span></div>
+  <p class="section-sub">This replays the pipeline's actual daily-active-investor series for the full simulated year,
+    compressed to under a minute. The feed on the right samples real streak breaks, recoveries, and nudges from the
+    generated dataset and surfaces them as the timeline reaches their date. Nothing here is production traffic:
+    it is a truthful replay of the same numbers quoted throughout this page, not a live feed of real users.</p>
+
+  <div class="replay-shell reveal">
+    <div class="replay-top">
+      <div style="display:flex;align-items:center;gap:14px">
+        <span class="live-badge"><span class="dot"></span>Replaying</span>
+        <span class="replay-date" id="replayDate">1 Jan 2025</span>
+      </div>
+      <div class="replay-controls">
+        <button class="icon-btn" id="playBtn" aria-label="Play/Pause">
+          <svg id="playIcon" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2l10 6-10 6V2z"/></svg>
+          <svg id="pauseIcon" viewBox="0 0 16 16" fill="currentColor" style="display:none"><path d="M4 2h3v12H4V2zm5 0h3v12H9V2z"/></svg>
+        </button>
+        <button class="icon-btn" id="resetBtn" aria-label="Restart">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M13.5 8A5.5 5.5 0 1 1 8 2.5"/><path d="M13.5 3v3.5H10" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="speed-group">
+          <button data-speed="1" class="">1x</button>
+          <button data-speed="4" class="active">4x</button>
+          <button data-speed="12">12x</button>
+        </div>
+      </div>
+    </div>
+    <div class="replay-body">
+      <div class="replay-chart">
+        <div class="replay-kpis">
+          <div class="replay-kpi"><div class="n" id="kpiActive">0</div><div class="k">Active investors today</div></div>
+          <div class="replay-kpi"><div class="n" id="kpiInvested">&#8377;0</div><div class="k">Invested this year so far</div></div>
+        </div>
+        <svg class="chart" viewBox="0 0 640 220" id="chartReplay"></svg>
+        <input type="range" class="scrub" id="scrub" min="0" max="360" value="0">
+      </div>
+      <div class="feed-panel">
+        <div class="feed-head">Event stream (sampled, real values)</div>
+        <div class="feed-list" id="feedList"><div class="feed-empty">Press play to start the replay.</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap section-pad alt" id="survival">
+  <div class="section-head"><h2>Survival analysis</h2><span class="section-tag">Kaplan&ndash;Meier &middot; Cox PH</span></div>
+  <p class="section-sub">Two different questions: how long a streak lives, and once it breaks, whether the user comes back.
+    Both are handled with censoring-aware survival methods rather than raw percentages.</p>
+
+  <div class="grid2">
+    <div class="card reveal">
+      <h3>Recovery collapses between day 3 and day 7</h3>
+      <p class="desc">Conditional probability a lapsed user returns within 30 days, by days already missed.</p>
+      <svg class="chart" viewBox="0 0 480 240" id="chartRecovery"></svg>
+      <div class="explain">
+        <div class="lvl-simple"><p>If someone misses one day, 93 out of 100 come back within a month. But if they've
+          already been gone for a week, only about half do. The sweet spot to send a reminder is day 5, right before
+          most people give up for good.</p></div>
+        <div class="lvl-advanced">
+          <p>Kaplan&ndash;Meier estimate of time-to-return after a streak break, with users still absent at the
+            30-day horizon treated as right-censored rather than "never returning."</p>
+          <span class="formula">P(return | missed k days) = 1 − S(30) / S(k)</span>
+          <p>Computed from the fitted survival function, not by counting rows: a user who lapsed 3 days before the
+            observation window closed never had a chance to return, and counting them as churned would bias the
+            estimate. See <code>src/analysis/survival_analysis.py</code>.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card reveal">
+      <h3>What actually changes the hazard of a break</h3>
+      <p class="desc">Cox proportional hazards, clustered on user_id. &gt;1 breaks faster, &lt;1 holds longer.</p>
+      <svg class="chart" viewBox="0 0 480 260" id="chartHazard"></svg>
+      <div class="explain">
+        <div class="lvl-simple"><p>A user's very first streak is the fragile one; it breaks about 18% faster than
+          their later streaks. Where someone came from (an ad, a friend's referral) or which city tier they're in
+          doesn't meaningfully change their odds once you account for this.</p></div>
+        <div class="lvl-advanced">
+          <p>Coefficients exponentiate to hazard ratios. Standard errors are clustered on <code>user_id</code>
+            because 50,576 streaks come from 5,000 users: treating them as independent inflates the effective
+            sample size roughly tenfold and manufactures significance. Two covariates that looked significant
+            unclustered (KYC completion speed, weekend signup) are null once clustering is applied.</p>
+          <span class="formula">h(t|x) = h0(t) &middot; exp(&beta;&middot;x),  robust (sandwich) SE by cluster</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap section-pad" id="cohorts">
+  <div class="section-head"><h2>Cohort retention, redefined</h2><span class="section-tag">27 weekly cohorts</span></div>
+  <p class="section-sub">D1 / D7 / D30, but "retained" means the user actually invested that day, not merely that
+    the account still exists. Cohorts without full exposure to a horizon are excluded rather than divided by a
+    partial denominator.</p>
+  <div class="card reveal">
+    <div class="table-scroll">
+      <table id="cohortTable">
+        <thead><tr><th>Cohort week</th><th class="num">Size</th><th class="num">D1 %</th><th class="num">D7 %</th><th class="num">D30 %</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="explain">
+      <div class="lvl-simple"><p>Out of everyone who signed up in a given week, this shows what share were still
+        actually investing 1, 7, and 30 days later. It stays fairly flat around 50&ndash;55% at D30 across the whole
+        year, no cohort is doing dramatically better or worse than another.</p></div>
+      <div class="lvl-advanced">
+        <p>Pooled retention is size-weighted, not an unweighted mean of cohorts, so a 52-user cohort cannot move the
+          headline as much as a 295-user one. A linear fit on the D30 series across all 27 cohorts gives a slope of
+          &minus;0.004 points per weekly cohort, indistinguishable from zero given a range of 47.1&ndash;66.3%.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap section-pad alt" id="experiment">
+  <div class="section-head"><h2>The nudge experiment</h2><span class="section-tag">risk-set matched &middot; Holm&ndash;Bonferroni</span></div>
+  <p class="section-sub">Users were randomised into treatment/control at signup, before any behaviour was observed.
+    Each treated break is compared only against control breaks that reached the same gap length unrecovered.</p>
+
+  <div class="grid2">
+    <div class="card reveal">
+      <h3>Lift by trigger day</h3>
+      <p class="desc">Percentage-point lift in 30-day recovery vs matched control.</p>
+      <svg class="chart" viewBox="0 0 480 240" id="chartNudge"></svg>
+    </div>
+    <div class="card reveal">
+      <h3>What each trigger day is worth</h3>
+      <table>
+        <thead><tr><th>Day</th><th class="num">Lift</th><th class="num">95% CI</th><th class="num">Sends/recovery</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td class="num">+3.7pp</td><td class="num">2.98&ndash;4.36</td><td class="num">27.3</td></tr>
+          <tr><td>2</td><td class="num">+3.8pp</td><td class="num">3.08&ndash;4.48</td><td class="num">26.4</td></tr>
+          <tr><td>3</td><td class="num">+3.6pp</td><td class="num">2.50&ndash;4.67</td><td class="num">27.9</td></tr>
+          <tr class="highlight"><td>5</td><td class="num">+7.7pp</td><td class="num">5.70&ndash;9.75</td><td class="num">12.9</td></tr>
+          <tr><td>7</td><td class="num">+4.1pp</td><td class="num">0.62&ndash;7.50</td><td class="num">24.6</td></tr>
+        </tbody>
+      </table>
+      <div class="explain">
+        <div class="lvl-simple"><p>Sending a reminder on day 5 works roughly twice as well as sending one on day 1,
+          2, 3, or 7. Day 1 nudges mostly reach people who were already coming back on their own.</p></div>
+        <div class="lvl-advanced">
+          <p>Five thresholds tested simultaneously carry a ~23% chance of at least one false positive at
+            &alpha;=0.05 by chance alone. Holm&ndash;Bonferroni correction is applied; all five thresholds remain
+            significant after correction, and day 5 is the standout by effect size, not merely by significance.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap section-pad" id="distributions">
+  <div class="section-head"><h2>Who is actually investing</h2><span class="section-tag">segmentation</span></div>
+  <div class="grid2">
+    <div class="card reveal">
+      <h3>Consistency is bimodal</h3>
+      <p class="desc">Share of days since signup each user actually invested. No meaningful middle.</p>
+      <svg class="chart" viewBox="0 0 480 220" id="chartConsistency"></svg>
+    </div>
+    <div class="card reveal">
+      <h3>Live streaks by length band</h3>
+      <p class="desc">How many people currently hold a habit, and how deep it goes.</p>
+      <svg class="chart" viewBox="0 0 480 220" id="chartBands"></svg>
+    </div>
+  </div>
+  <div class="explain" style="margin-top:20px">
+    <div class="lvl-simple"><p>2,435 users barely invest at all (under 10% of days). 1,041 invest almost every
+      single day (over 90%). Almost nobody is in between, the "average" user described by a typical dashboard
+      metric barely exists.</p></div>
+    <div class="lvl-advanced"><p>This bimodality was not a hypothesis going in. It reframes the retention question
+      from "raise the average" (which targets a near-empty region of the distribution) to "what moves a user from
+      the left cluster to the right one, and how early is that transition visible."</p></div>
+  </div>
+</div>
+
+<div class="wrap section-pad alt" id="quality">
+  <div class="section-head"><h2>Data quality, in the open</h2><span class="section-tag">6 automated checks</span></div>
+  <p class="section-sub">Checks run against the raw tables, never the cleaned view, so a defect the analysis
+    already tolerates does not silently disappear from the audit trail.</p>
+  <div class="quality-grid" id="qualityGrid"></div>
+</div>
+
+<div class="wrap">
+  <footer>
+    <span class="snapshot-pill">Snapshot &middot; simulated data &middot; regenerates from a fixed seed</span>
+    <div class="foot-links">
+      <a href="https://github.com/Navneet-Scaler/cadence">GitHub</a>
+      <a href="https://github.com/Navneet-Scaler/cadence/blob/main/MEMO.md">Memo</a>
+      <a href="https://github.com/Navneet-Scaler/cadence/blob/main/ASSUMPTIONS.md">Assumptions</a>
+      <a href="https://github.com/Navneet-Scaler/cadence/blob/main/data_quality_findings.md">Data quality findings</a>
+      <a href="https://github.com/Navneet-Scaler/cadence/releases">Releases</a>
+    </div>
+    <div>Built end to end from schema to decision memo.</div>
+  </footer>
+</div>
+
+<script id="cadence-data" type="application/json">{"daily":[{"d":"2025-01-05","u":1,"amt":101.0},{"d":"2025-01-06","u":4,"amt":84.0},{"d":"2025-01-07","u":8,"amt":227.0},{"d":"2025-01-08","u":8,"amt":198.0},{"d":"2025-01-09","u":12,"amt":282.0},{"d":"2025-01-10","u":13,"amt":363.0},{"d":"2025-01-11","u":8,"amt":308.0},{"d":"2025-01-12","u":8,"amt":147.0},{"d":"2025-01-13","u":14,"amt":353.0},{"d":"2025-01-14","u":20,"amt":640.0},{"d":"2025-01-15","u":23,"amt":552.0},{"d":"2025-01-16","u":25,"amt":735.0},{"d":"2025-01-17","u":29,"amt":689.0},{"d":"2025-01-18","u":17,"amt":607.0},{"d":"2025-01-19","u":12,"amt":362.0},{"d":"2025-01-20","u":20,"amt":540.0},{"d":"2025-01-21","u":26,"amt":715.0},{"d":"2025-01-22","u":34,"amt":1363.0},{"d":"2025-01-23","u":28,"amt":818.0},{"d":"2025-01-24","u":32,"amt":961.0},{"d":"2025-01-25","u":24,"amt":844.0},{"d":"2025-01-26","u":28,"amt":1167.0},{"d":"2025-01-27","u":38,"amt":1157.0},{"d":"2025-01-28","u":48,"amt":1517.0},{"d":"2025-01-29","u":47,"amt":1606.0},{"d":"2025-01-30","u":53,"amt":1683.0},{"d":"2025-01-31","u":58,"amt":1756.0},{"d":"2025-02-01","u":50,"amt":1498.0},{"d":"2025-02-02","u":40,"amt":1070.0},{"d":"2025-02-03","u":67,"amt":2225.0},{"d":"2025-02-04","u":81,"amt":2788.0},{"d":"2025-02-05","u":86,"amt":2594.0},{"d":"2025-02-06","u":98,"amt":3046.0},{"d":"2025-02-07","u":99,"amt":3028.0},{"d":"2025-02-08","u":73,"amt":2573.0},{"d":"2025-02-09","u":70,"amt":2030.0},{"d":"2025-02-10","u":102,"amt":3201.0},{"d":"2025-02-11","u":125,"amt":3690.0},{"d":"2025-02-12","u":125,"amt":3654.0},{"d":"2025-02-13","u":138,"amt":4658.0},{"d":"2025-02-14","u":150,"amt":4818.0},{"d":"2025-02-15","u":104,"amt":3304.0},{"d":"2025-02-16","u":98,"amt":2758.0},{"d":"2025-02-17","u":138,"amt":4077.0},{"d":"2025-02-18","u":151,"amt":4417.0},{"d":"2025-02-19","u":163,"amt":5203.0},{"d":"2025-02-20","u":166,"amt":4964.0},{"d":"2025-02-21","u":184,"amt":5152.0},{"d":"2025-02-22","u":125,"amt":3213.0},{"d":"2025-02-23","u":114,"amt":3681.0},{"d":"2025-02-24","u":174,"amt":5640.0},{"d":"2025-02-25","u":199,"amt":5835.0},{"d":"2025-02-26","u":204,"amt":6611.0},{"d":"2025-02-27","u":217,"amt":7015.0},{"d":"2025-02-28","u":228,"amt":6933.0},{"d":"2025-03-01","u":161,"amt":4860.0},{"d":"2025-03-02","u":152,"amt":4557.0},{"d":"2025-03-03","u":224,"amt":7510.0},{"d":"2025-03-04","u":249,"amt":7635.0},{"d":"2025-03-05","u":267,"amt":8903.0},{"d":"2025-03-06","u":295,"amt":8918.0},{"d":"2025-03-07","u":315,"amt":9631.0},{"d":"2025-03-08","u":223,"amt":7029.0},{"d":"2025-03-09","u":191,"amt":6589.0},{"d":"2025-03-10","u":272,"amt":8289.0},{"d":"2025-03-11","u":317,"amt":10255.0},{"d":"2025-03-12","u":325,"amt":10630.0},{"d":"2025-03-13","u":343,"amt":11337.0},{"d":"2025-03-14","u":379,"amt":11903.0},{"d":"2025-03-15","u":257,"amt":7460.0},{"d":"2025-03-16","u":228,"amt":7103.0},{"d":"2025-03-17","u":330,"amt":10277.0},{"d":"2025-03-18","u":388,"amt":11463.0},{"d":"2025-03-19","u":394,"amt":12556.0},{"d":"2025-03-20","u":431,"amt":13084.0},{"d":"2025-03-21","u":438,"amt":12777.0},{"d":"2025-03-22","u":306,"amt":10003.0},{"d":"2025-03-23","u":271,"amt":8663.0},{"d":"2025-03-24","u":394,"amt":11387.0},{"d":"2025-03-25","u":448,"amt":13735.0},{"d":"2025-03-26","u":464,"amt":14869.0},{"d":"2025-03-27","u":467,"amt":14880.0},{"d":"2025-03-28","u":495,"amt":15515.0},{"d":"2025-03-29","u":330,"amt":10208.0},{"d":"2025-03-30","u":296,"amt":9059.0},{"d":"2025-03-31","u":407,"amt":12401.0},{"d":"2025-04-01","u":500,"amt":15882.0},{"d":"2025-04-02","u":542,"amt":17056.0},{"d":"2025-04-03","u":576,"amt":17854.0},{"d":"2025-04-04","u":621,"amt":18945.0},{"d":"2025-04-05","u":443,"amt":13567.0},{"d":"2025-04-06","u":389,"amt":12016.0},{"d":"2025-04-07","u":556,"amt":16776.0},{"d":"2025-04-08","u":611,"amt":18733.0},{"d":"2025-04-09","u":636,"amt":20695.0},{"d":"2025-04-10","u":660,"amt":21295.0},{"d":"2025-04-11","u":692,"amt":22755.0},{"d":"2025-04-12","u":470,"amt":14667.0},{"d":"2025-04-13","u":422,"amt":13555.0},{"d":"2025-04-14","u":587,"amt":17087.0},{"d":"2025-04-15","u":660,"amt":20238.0},{"d":"2025-04-16","u":706,"amt":22120.0},{"d":"2025-04-17","u":713,"amt":23393.0},{"d":"2025-04-18","u":733,"amt":23735.0},{"d":"2025-04-19","u":494,"amt":15439.0},{"d":"2025-04-20","u":446,"amt":13816.0},{"d":"2025-04-21","u":670,"amt":21119.0},{"d":"2025-04-22","u":749,"amt":23708.0},{"d":"2025-04-23","u":778,"amt":24899.0},{"d":"2025-04-24","u":799,"amt":25612.0},{"d":"2025-04-25","u":808,"amt":25096.0},{"d":"2025-04-26","u":499,"amt":15635.0},{"d":"2025-04-27","u":458,"amt":14781.0},{"d":"2025-04-28","u":648,"amt":19950.0},{"d":"2025-04-29","u":767,"amt":22930.0},{"d":"2025-04-30","u":807,"amt":25876.0},{"d":"2025-05-01","u":853,"amt":26185.0},{"d":"2025-05-02","u":899,"amt":27957.0},{"d":"2025-05-03","u":604,"amt":19350.0},{"d":"2025-05-04","u":546,"amt":16770.0},{"d":"2025-05-05","u":782,"amt":24095.0},{"d":"2025-05-06","u":912,"amt":29903.0},{"d":"2025-05-07","u":955,"amt":28877.0},{"d":"2025-05-08","u":956,"amt":28660.0},{"d":"2025-05-09","u":1030,"amt":33330.0},{"d":"2025-05-10","u":689,"amt":20767.0},{"d":"2025-05-11","u":601,"amt":18620.0},{"d":"2025-05-12","u":852,"amt":27407.0},{"d":"2025-05-13","u":1009,"amt":31337.0},{"d":"2025-05-14","u":1051,"amt":33475.0},{"d":"2025-05-15","u":1077,"amt":34310.0},{"d":"2025-05-16","u":1130,"amt":34284.0},{"d":"2025-05-17","u":748,"amt":22034.0},{"d":"2025-05-18","u":682,"amt":20519.0},{"d":"2025-05-19","u":946,"amt":29712.0},{"d":"2025-05-20","u":1081,"amt":33955.0},{"d":"2025-05-21","u":1116,"amt":35290.0},{"d":"2025-05-22","u":1169,"amt":36668.0},{"d":"2025-05-23","u":1234,"amt":37767.0},{"d":"2025-05-24","u":825,"amt":25958.0},{"d":"2025-05-25","u":733,"amt":22444.0},{"d":"2025-05-26","u":975,"amt":30637.0},{"d":"2025-05-27","u":1142,"amt":34701.0},{"d":"2025-05-28","u":1174,"amt":35521.0},{"d":"2025-05-29","u":1190,"amt":37014.0},{"d":"2025-05-30","u":1252,"amt":38712.0},{"d":"2025-05-31","u":811,"amt":25240.0},{"d":"2025-06-01","u":781,"amt":24499.0},{"d":"2025-06-02","u":1111,"amt":35612.0},{"d":"2025-06-03","u":1280,"amt":40850.0},{"d":"2025-06-04","u":1361,"amt":41481.0},{"d":"2025-06-05","u":1415,"amt":46174.0},{"d":"2025-06-06","u":1473,"amt":45920.0},{"d":"2025-06-07","u":1028,"amt":31825.0},{"d":"2025-06-08","u":896,"amt":28434.0},{"d":"2025-06-09","u":1253,"amt":39718.0},{"d":"2025-06-10","u":1430,"amt":43502.0},{"d":"2025-06-11","u":1494,"amt":46610.0},{"d":"2025-06-12","u":1563,"amt":47129.0},{"d":"2025-06-13","u":1598,"amt":48951.0},{"d":"2025-06-14","u":1057,"amt":32606.0},{"d":"2025-06-15","u":887,"amt":26452.0},{"d":"2025-06-16","u":1283,"amt":40091.0},{"d":"2025-06-17","u":1416,"amt":44689.0},{"d":"2025-06-18","u":1522,"amt":48204.0},{"d":"2025-06-19","u":1558,"amt":48422.0},{"d":"2025-06-20","u":1607,"amt":50967.0},{"d":"2025-06-21","u":1056,"amt":32989.0},{"d":"2025-06-22","u":956,"amt":30196.0},{"d":"2025-06-23","u":1388,"amt":44288.0},{"d":"2025-06-24","u":1565,"amt":49080.0},{"d":"2025-06-25","u":1553,"amt":47432.0},{"d":"2025-06-26","u":1569,"amt":50246.0},{"d":"2025-06-27","u":1656,"amt":50000.0},{"d":"2025-06-28","u":1075,"amt":32799.0},{"d":"2025-06-29","u":967,"amt":29762.0},{"d":"2025-06-30","u":1340,"amt":42611.0},{"d":"2025-07-01","u":1563,"amt":49950.0},{"d":"2025-07-02","u":1691,"amt":54619.0},{"d":"2025-07-03","u":1755,"amt":53533.0},{"d":"2025-07-04","u":1826,"amt":58061.0},{"d":"2025-07-05","u":1248,"amt":39154.0},{"d":"2025-07-06","u":1131,"amt":35108.0},{"d":"2025-07-07","u":1522,"amt":47322.0},{"d":"2025-07-08","u":1730,"amt":53829.0},{"d":"2025-07-09","u":1755,"amt":56208.0},{"d":"2025-07-10","u":1813,"amt":56516.0},{"d":"2025-07-11","u":1848,"amt":56461.0},{"d":"2025-07-12","u":1238,"amt":37813.0},{"d":"2025-07-13","u":1086,"amt":33306.0},{"d":"2025-07-14","u":1504,"amt":47797.0},{"d":"2025-07-15","u":1678,"amt":53416.0},{"d":"2025-07-16","u":1721,"amt":52470.0},{"d":"2025-07-17","u":1774,"amt":54869.0},{"d":"2025-07-18","u":1830,"amt":57252.0},{"d":"2025-07-19","u":1194,"amt":38206.0},{"d":"2025-07-20","u":1040,"amt":32590.0},{"d":"2025-07-21","u":1484,"amt":47349.0},{"d":"2025-07-22","u":1652,"amt":51148.0},{"d":"2025-07-23","u":1702,"amt":51181.0},{"d":"2025-07-24","u":1786,"amt":54279.0},{"d":"2025-07-25","u":1819,"amt":55176.0},{"d":"2025-07-26","u":1146,"amt":36248.0},{"d":"2025-07-27","u":1025,"amt":33492.0},{"d":"2025-07-28","u":1432,"amt":45420.0},{"d":"2025-07-29","u":1597,"amt":48217.0},{"d":"2025-07-30","u":1680,"amt":52948.0},{"d":"2025-07-31","u":1705,"amt":52647.0},{"d":"2025-08-01","u":1804,"amt":56389.0},{"d":"2025-08-02","u":1230,"amt":38191.0},{"d":"2025-08-03","u":1101,"amt":34739.0},{"d":"2025-08-04","u":1511,"amt":47883.0},{"d":"2025-08-05","u":1688,"amt":52904.0},{"d":"2025-08-06","u":1769,"amt":55490.0},{"d":"2025-08-07","u":1801,"amt":57913.0},{"d":"2025-08-08","u":1837,"amt":58310.0},{"d":"2025-08-09","u":1224,"amt":39233.0},{"d":"2025-08-10","u":1103,"amt":32083.0},{"d":"2025-08-11","u":1485,"amt":45204.0},{"d":"2025-08-12","u":1669,"amt":51232.0},{"d":"2025-08-13","u":1706,"amt":53510.0},{"d":"2025-08-14","u":1729,"amt":53653.0},{"d":"2025-08-15","u":1750,"amt":53990.0},{"d":"2025-08-16","u":1192,"amt":37157.0},{"d":"2025-08-17","u":1045,"amt":32642.0},{"d":"2025-08-18","u":1413,"amt":44036.0},{"d":"2025-08-19","u":1576,"amt":48385.0},{"d":"2025-08-20","u":1633,"amt":51574.0},{"d":"2025-08-21","u":1673,"amt":52567.0},{"d":"2025-08-22","u":1700,"amt":52943.0},{"d":"2025-08-23","u":1177,"amt":36092.0},{"d":"2025-08-24","u":1047,"amt":33437.0},{"d":"2025-08-25","u":1399,"amt":44536.0},{"d":"2025-08-26","u":1548,"amt":47669.0},{"d":"2025-08-27","u":1572,"amt":48169.0},{"d":"2025-08-28","u":1604,"amt":50111.0},{"d":"2025-08-29","u":1646,"amt":50486.0},{"d":"2025-08-30","u":1105,"amt":36392.0},{"d":"2025-08-31","u":969,"amt":29817.0},{"d":"2025-09-01","u":1371,"amt":42251.0},{"d":"2025-09-02","u":1545,"amt":47605.0},{"d":"2025-09-03","u":1591,"amt":49349.0},{"d":"2025-09-04","u":1623,"amt":49757.0},{"d":"2025-09-05","u":1659,"amt":50921.0},{"d":"2025-09-06","u":1152,"amt":35662.0},{"d":"2025-09-07","u":1025,"amt":33119.0},{"d":"2025-09-08","u":1378,"amt":43121.0},{"d":"2025-09-09","u":1518,"amt":48491.0},{"d":"2025-09-10","u":1565,"amt":47654.0},{"d":"2025-09-11","u":1600,"amt":50572.0},{"d":"2025-09-12","u":1643,"amt":49835.0},{"d":"2025-09-13","u":1143,"amt":35344.0},{"d":"2025-09-14","u":992,"amt":28703.0},{"d":"2025-09-15","u":1326,"amt":42146.0},{"d":"2025-09-16","u":1483,"amt":45000.0},{"d":"2025-09-17","u":1506,"amt":47391.0},{"d":"2025-09-18","u":1527,"amt":47311.0},{"d":"2025-09-19","u":1577,"amt":48547.0},{"d":"2025-09-20","u":1106,"amt":35650.0},{"d":"2025-09-21","u":986,"amt":30112.0},{"d":"2025-09-22","u":1312,"amt":40393.0},{"d":"2025-09-23","u":1476,"amt":46209.0},{"d":"2025-09-24","u":1498,"amt":45981.0},{"d":"2025-09-25","u":1505,"amt":45735.0},{"d":"2025-09-26","u":1540,"amt":48718.0},{"d":"2025-09-27","u":1091,"amt":33740.0},{"d":"2025-09-28","u":994,"amt":31594.0},{"d":"2025-09-29","u":1284,"amt":41983.0},{"d":"2025-09-30","u":1425,"amt":43529.0},{"d":"2025-10-01","u":1476,"amt":45555.0},{"d":"2025-10-02","u":1531,"amt":46316.0},{"d":"2025-10-03","u":1561,"amt":49941.0},{"d":"2025-10-04","u":1110,"amt":34042.0},{"d":"2025-10-05","u":981,"amt":31953.0},{"d":"2025-10-06","u":1323,"amt":42520.0},{"d":"2025-10-07","u":1448,"amt":47052.0},{"d":"2025-10-08","u":1491,"amt":45813.0},{"d":"2025-10-09","u":1494,"amt":46121.0},{"d":"2025-10-10","u":1544,"amt":49057.0},{"d":"2025-10-11","u":1073,"amt":33223.0},{"d":"2025-10-12","u":959,"amt":30146.0},{"d":"2025-10-13","u":1304,"amt":41954.0},{"d":"2025-10-14","u":1449,"amt":44625.0},{"d":"2025-10-15","u":1474,"amt":45682.0},{"d":"2025-10-16","u":1501,"amt":47441.0},{"d":"2025-10-17","u":1514,"amt":47423.0},{"d":"2025-10-18","u":1077,"amt":33141.0},{"d":"2025-10-19","u":964,"amt":29630.0},{"d":"2025-10-20","u":1285,"amt":41423.0},{"d":"2025-10-21","u":1389,"amt":43778.0},{"d":"2025-10-22","u":1413,"amt":44932.0},{"d":"2025-10-23","u":1424,"amt":45091.0},{"d":"2025-10-24","u":1465,"amt":46480.0},{"d":"2025-10-25","u":1066,"amt":32697.0},{"d":"2025-10-26","u":939,"amt":28787.0},{"d":"2025-10-27","u":1244,"amt":38145.0},{"d":"2025-10-28","u":1384,"amt":44284.0},{"d":"2025-10-29","u":1416,"amt":43322.0},{"d":"2025-10-30","u":1425,"amt":44093.0},{"d":"2025-10-31","u":1448,"amt":43265.0},{"d":"2025-11-01","u":1080,"amt":34169.0},{"d":"2025-11-02","u":974,"amt":30046.0},{"d":"2025-11-03","u":1279,"amt":39568.0},{"d":"2025-11-04","u":1417,"amt":42800.0},{"d":"2025-11-05","u":1449,"amt":46147.0},{"d":"2025-11-06","u":1457,"amt":44085.0},{"d":"2025-11-07","u":1495,"amt":47878.0},{"d":"2025-11-08","u":1052,"amt":32654.0},{"d":"2025-11-09","u":980,"amt":30431.0},{"d":"2025-11-10","u":1306,"amt":40985.0},{"d":"2025-11-11","u":1396,"amt":42623.0},{"d":"2025-11-12","u":1403,"amt":42451.0},{"d":"2025-11-13","u":1427,"amt":44542.0},{"d":"2025-11-14","u":1455,"amt":46786.0},{"d":"2025-11-15","u":1042,"amt":32963.0},{"d":"2025-11-16","u":931,"amt":28800.0},{"d":"2025-11-17","u":1227,"amt":39026.0},{"d":"2025-11-18","u":1363,"amt":41374.0},{"d":"2025-11-19","u":1379,"amt":43559.0},{"d":"2025-11-20","u":1413,"amt":43246.0},{"d":"2025-11-21","u":1421,"amt":43746.0},{"d":"2025-11-22","u":1029,"amt":31956.0},{"d":"2025-11-23","u":922,"amt":28644.0},{"d":"2025-11-24","u":1204,"amt":36350.0},{"d":"2025-11-25","u":1333,"amt":41197.0},{"d":"2025-11-26","u":1367,"amt":41034.0},{"d":"2025-11-27","u":1361,"amt":43583.0},{"d":"2025-11-28","u":1389,"amt":43130.0},{"d":"2025-11-29","u":1024,"amt":30400.0},{"d":"2025-11-30","u":932,"amt":29363.0},{"d":"2025-12-01","u":1201,"amt":36395.0},{"d":"2025-12-02","u":1314,"amt":40600.0},{"d":"2025-12-03","u":1346,"amt":42148.0},{"d":"2025-12-04","u":1382,"amt":41681.0},{"d":"2025-12-05","u":1383,"amt":41925.0},{"d":"2025-12-06","u":1058,"amt":32592.0},{"d":"2025-12-07","u":967,"amt":29331.0},{"d":"2025-12-08","u":1218,"amt":37057.0},{"d":"2025-12-09","u":1323,"amt":40787.0},{"d":"2025-12-10","u":1357,"amt":43258.0},{"d":"2025-12-11","u":1361,"amt":41126.0},{"d":"2025-12-12","u":1374,"amt":42404.0},{"d":"2025-12-13","u":1060,"amt":33684.0},{"d":"2025-12-14","u":964,"amt":29858.0},{"d":"2025-12-15","u":1225,"amt":38471.0},{"d":"2025-12-16","u":1292,"amt":40917.0},{"d":"2025-12-17","u":1326,"amt":41617.0},{"d":"2025-12-18","u":1345,"amt":43752.0},{"d":"2025-12-19","u":1372,"amt":43341.0},{"d":"2025-12-20","u":1022,"amt":31490.0},{"d":"2025-12-21","u":947,"amt":30641.0},{"d":"2025-12-22","u":1225,"amt":37879.0},{"d":"2025-12-23","u":1332,"amt":41899.0},{"d":"2025-12-24","u":1345,"amt":41179.0},{"d":"2025-12-25","u":1326,"amt":40559.0},{"d":"2025-12-26","u":1353,"amt":41325.0},{"d":"2025-12-27","u":1060,"amt":35010.0},{"d":"2025-12-28","u":940,"amt":30363.0},{"d":"2025-12-29","u":1190,"amt":35989.0},{"d":"2025-12-30","u":1270,"amt":39928.0},{"d":"2025-12-31","u":1278,"amt":40285.0}],"feed":[{"d":"2025-01-17","type":"lapsed","streak":10,"archetype":"early_dropper","gap":null},{"d":"2025-02-16","type":"nudge","gap":2,"channel":"push","archetype":"weekday_only"},{"d":"2025-02-28","type":"lapsed","streak":11,"archetype":"early_dropper","gap":null},{"d":"2025-03-01","type":"recovered","streak":19,"archetype":"sticky_former","gap":2},{"d":"2025-03-04","type":"lapsed","streak":12,"archetype":"early_dropper","gap":null},{"d":"2025-03-04","type":"lapsed","streak":21,"archetype":"early_dropper","gap":null},{"d":"2025-03-10","type":"nudge","gap":3,"channel":"push","archetype":"weekday_only"},{"d":"2025-03-15","type":"lapsed","streak":12,"archetype":"payday_spiker","gap":null},{"d":"2025-03-16","type":"nudge","gap":2,"channel":"sms","archetype":"early_dropper"},{"d":"2025-03-21","type":"nudge","gap":1,"channel":"push","archetype":"payday_spiker"},{"d":"2025-03-22","type":"recovered","streak":13,"archetype":"sticky_former","gap":2},{"d":"2025-03-23","type":"nudge","gap":1,"channel":"push","archetype":"payday_spiker"},{"d":"2025-03-23","type":"nudge","gap":2,"channel":"sms","archetype":"weekday_only"},{"d":"2025-03-24","type":"nudge","gap":3,"channel":"push","archetype":"weekday_only"},{"d":"2025-03-26","type":"lapsed","streak":10,"archetype":"payday_spiker","gap":null},{"d":"2025-03-28","type":"nudge","gap":1,"channel":"email","archetype":"weekday_only"},{"d":"2025-04-05","type":"lapsed","streak":17,"archetype":"early_dropper","gap":null},{"d":"2025-04-05","type":"nudge","gap":1,"channel":"push","archetype":"weekday_only"},{"d":"2025-04-05","type":"nudge","gap":5,"channel":"push","archetype":"early_dropper"},{"d":"2025-04-05","type":"nudge","gap":1,"channel":"sms","archetype":"weekday_only"},{"d":"2025-04-10","type":"lapsed","streak":15,"archetype":"payday_spiker","gap":null},{"d":"2025-04-11","type":"recovered","streak":38,"archetype":"sticky_former","gap":2},{"d":"2025-04-13","type":"lapsed","streak":10,"archetype":"payday_spiker","gap":null},{"d":"2025-04-16","type":"lapsed","streak":12,"archetype":"payday_spiker","gap":null},{"d":"2025-04-17","type":"lapsed","streak":17,"archetype":"payday_spiker","gap":null},{"d":"2025-04-17","type":"lapsed","streak":17,"archetype":"payday_spiker","gap":null},{"d":"2025-04-18","type":"lapsed","streak":17,"archetype":"early_dropper","gap":null},{"d":"2025-04-18","type":"lapsed","streak":14,"archetype":"early_dropper","gap":null},{"d":"2025-04-18","type":"nudge","gap":3,"channel":"push","archetype":"payday_spiker"},{"d":"2025-04-19","type":"lapsed","streak":14,"archetype":"early_dropper","gap":null},{"d":"2025-04-20","type":"nudge","gap":1,"channel":"sms","archetype":"sticky_former"},{"d":"2025-04-20","type":"nudge","gap":2,"channel":"push","archetype":"sticky_former"},{"d":"2025-04-26","type":"recovered","streak":12,"archetype":"sticky_former","gap":2},{"d":"2025-04-26","type":"nudge","gap":1,"channel":"sms","archetype":"weekday_only"},{"d":"2025-04-28","type":"recovered","streak":15,"archetype":"sticky_former","gap":2},{"d":"2025-05-01","type":"nudge","gap":1,"channel":"push","archetype":"weekday_only"},{"d":"2025-05-02","type":"nudge","gap":7,"channel":"push","archetype":"weekday_only"},{"d":"2025-05-04","type":"nudge","gap":2,"channel":"sms","archetype":"weekday_only"},{"d":"2025-05-05","type":"lapsed","streak":21,"archetype":"early_dropper","gap":null},{"d":"2025-05-05","type":"nudge","gap":2,"channel":"push","archetype":"payday_spiker"},{"d":"2025-05-07","type":"recovered","streak":17,"archetype":"sticky_former","gap":2},{"d":"2025-05-07","type":"nudge","gap":1,"channel":"sms","archetype":"sticky_former"},{"d":"2025-05-07","type":"nudge","gap":2,"channel":"sms","archetype":"payday_spiker"},{"d":"2025-05-08","type":"recovered","streak":11,"archetype":"payday_spiker","gap":21},{"d":"2025-05-08","type":"lapsed","streak":10,"archetype":"early_dropper","gap":null},{"d":"2025-05-09","type":"recovered","streak":21,"archetype":"sticky_former","gap":2},{"d":"2025-05-09","type":"lapsed","streak":10,"archetype":"payday_spiker","gap":null},{"d":"2025-05-10","type":"lapsed","streak":12,"archetype":"payday_spiker","gap":null},{"d":"2025-05-10","type":"nudge","gap":1,"channel":"sms","archetype":"weekday_only"},{"d":"2025-05-11","type":"recovered","streak":10,"archetype":"sticky_former","gap":2},{"d":"2025-05-13","type":"lapsed","streak":16,"archetype":"payday_spiker","gap":null},{"d":"2025-05-13","type":"nudge","gap":1,"channel":"push","archetype":"payday_spiker"},{"d":"2025-05-13","type":"nudge","gap":3,"channel":"push","archetype":"payday_spiker"},{"d":"2025-05-13","type":"nudge","gap":1,"channel":"sms","archetype":"payday_spiker"},{"d":"2025-05-15","type":"lapsed","streak":15,"archetype":"payday_spiker","gap":null},{"d":"2025-05-16","type":"recovered","streak":16,"archetype":"payday_spiker","gap":3},{"d":"2025-05-16","type":"recovered","streak":15,"archetype":"payday_spiker","gap":15},{"d":"2025-05-16","type":"recovered","streak":11,"archetype":"sticky_former","gap":2},{"d":"2025-05-16","type":"recovered","streak":11,"archetype":"sticky_former","gap":2},{"d":"2025-05-16","type":"lapsed","streak":12,"archetype":"early_dropper","gap":null},{"d":"2025-05-17","type":"recovered","streak":19,"archetype":"payday_spiker","gap":8},{"d":"2025-05-17","type":"recovered","streak":10,"archetype":"sticky_former","gap":3},{"d":"2025-05-17","type":"recovered","streak":13,"archetype":"sticky_former","gap":2},{"d":"2025-05-18","type":"recovered","streak":10,"archetype":"sticky_former","gap":2},{"d":"2025-05-20","type":"nudge","gap":2,"channel":"push","archetype":"sticky_former"},{"d":"2025-05-20","type":"nudge","gap":1,"channel":"push","archetype":"sticky_former"},{"d":"2025-05-21","type":"recovered","streak":17,"archetype":"sticky_former","gap":2},{"d":"2025-05-21","type":"nudge","gap":5,"channel":"push","archetype":"payday_spiker"},{"d":"2025-05-22","type":"nudge","gap":5,"channel":"sms","archetype":"weekday_only"},{"d":"2025-05-23","type":"recovered","streak":13,"archetype":"sticky_former","gap":4},{"d":"2025-05-23","type":"recovered","streak":14,"archetype":"early_dropper","gap":3},{"d":"2025-05-23","type":"lapsed","streak":12,"archetype":"early_dropper","gap":null},{"d":"2025-05-24","type":"recovered","streak":12,"archetype":"payday_spiker","gap":2},{"d":"2025-05-24","type":"recovered","streak":35,"archetype":"sticky_former","gap":4},{"d":"2025-05-24","type":"lapsed","streak":11,"archetype":"early_dropper","gap":null},{"d":"2025-05-24","type":"nudge","gap":1,"channel":"push","archetype":"weekday_only"},{"d":"2025-05-24","type":"nudge","gap":3,"channel":"sms","archetype":"sticky_former"},{"d":"2025-05-25","type":"lapsed","streak":11,"archetype":"early_dropper","gap":null},{"d":"2025-05-25","type":"nudge","gap":2,"channel":"sms","archetype":"weekday_only"},{"d":"2025-05-26","type":"recovered","streak":29,"archetype":"payday_spiker","gap":6},{"d":"2025-05-26","type":"lapsed","streak":22,"archetype":"payday_spiker","gap":null},{"d":"2025-05-26","type":"nudge","gap":3,"channel":"email","archetype":"weekday_only"},{"d":"2025-05-27","type":"lapsed","streak":10,"archetype":"early_dropper","gap":null},{"d":"2025-05-28","type":"lapsed","streak":10,"archetype":"early_dropper","gap":null},{"d":"2025-05-28","type":"nudge","gap":3,"channel":"push","archetype":"early_dropper"},{"d":"2025-05-30","type":"recovered","streak":18,"archetype":"sticky_former","gap":5},{"d":"2025-05-31","type":"recovered","streak":13,"archetype":"sticky_former","gap":4},{"d":"2025-05-31","type":"recovered","streak":18,"archetype":"sticky_former","gap":2},{"d":"2025-05-31","type":"lapsed","streak":19,"archetype":"early_dropper","gap":null},{"d":"2025-05-31","type":"lapsed","streak":14,"archetype":"early_dropper","gap":null},{"d":"2025-05-31","type":"nudge","gap":1,"channel":"push","archetype":"weekday_only"},{"d":"2025-06-01","type":"recovered","streak":29,"archetype":"sticky_former","gap":2},{"d":"2025-06-01","type":"nudge","gap":1,"channel":"push","archetype":"sticky_former"},{"d":"2025-06-01","type":"nudge","gap":3,"channel":"push","archetype":"weekday_only"},{"d":"2025-06-03","type":"lapsed","streak":10,"archetype":"early_dropper","gap":null},{"d":"2025-06-03","type":"nudge","gap":2,"channel":"sms","archetype":"early_dropper"},{"d":"2025-06-05","type":"recovered","streak":11,"archetype":"sticky_former","gap":4},{"d":"2025-06-06","type":"recovered","streak":12,"archetype":"sticky_former","gap":2},{"d":"2025-06-06","type":"lapsed","streak":15,"archetype":"early_dropper","gap":null},{"d":"2025-06-06","type":"nudge","gap":2,"channel":"push","archetype":"sticky_former"},{"d":"2025-06-07","type":"recovered","streak":15,"archetype":"sticky_former","gap":4},{"d":"2025-06-07","type":"recovered","streak":18,"archetype":"sticky_former","gap":2},{"d":"2025-06-09","type":"nudge","gap":3,"channel":"push","archetype":"payday_spiker"},{"d":"2025-06-10","type":"nudge","gap":2,"channel":"push","archetype":"payday_spiker"},{"d":"2025-06-10","type":"nudge","gap":5,"channel":"push","archetype":"payday_spiker"},{"d":"2025-06-11","type":"recovered","streak":16,"archetype":"sticky_former","gap":2},{"d":"2025-06-11","type":"nudge","gap":1,"channel":"email","archetype":"payday_spiker"},{"d":"2025-06-12","type":"lapsed","streak":13,"archetype":"payday_spiker","gap":null},{"d":"2025-06-13","type":"recovered","streak":12,"archetype":"weekday_only","gap":4},{"d":"2025-06-13","type":"recovered","streak":16,"archetype":"payday_spiker","gap":2},{"d":"2025-06-13","type":"lapsed","streak":11,"archetype":"payday_spiker","gap":null},{"d":"2025-06-13","type":"lapsed","streak":10,"archetype":"early_dropper","gap":null},{"d":"2025-06-13","type":"lapsed","streak":12,"archetype":"payday_spiker","gap":null},{"d":"2025-06-14","type":"lapsed","streak":17,"archetype":"payday_spiker","gap":null},{"d":"2025-06-14","type":"nudge","gap":2,"channel":"sms","archetype":"early_dropper"},{"d":"2025-06-15","type":"nudge","gap":2,"channel":"push","archetype":"sticky_former"},{"d":"2025-06-15","type":"nudge","gap":1,"channel":"push","archetype":"sticky_former"},{"d":"2025-06-15","type":"nudge","gap":2,"channel":"push","archetype":"weekday_only"},{"d":"2025-06-15","type":"nudge","gap":3,"channel":"email","archetype":"payday_spiker"},{"d":"2025-06-15","type":"nudge","gap":2,"channel":"email","archetype":"weekday_only"},{"d":"2025-06-17","type":"lapsed","streak":17,"archetype":"payday_spiker","gap":null},{"d":"2025-06-18","type":"nudge","gap":5,"channel":"push","archetype":"early_dropper"},{"d":"2025-06-18","type":"nudge","gap":1,"channel":"email","archetype":"payday_spiker"},{"d":"2025-06-19","type":"nudge","gap":2,"channel":"push","archetype":"early_dropper"},{"d":"2025-06-20","type":"recovered","streak":19,"archetype":"payday_spiker","gap":3},{"d":"2025-06-20","type":"recovered","streak":19,"archetype":"sticky_former","gap":2},{"d":"2025-06-20","type":"recovered","streak":33,"archetype":"sticky_former","gap":4},{"d":"2025-06-21","type":"recovered","streak":12,"archetype":"sticky_former","gap":4},{"d":"2025-06-21","type":"lapsed","streak":10,"archetype":"payday_spiker","gap":null},{"d":"2025-06-21","type":"nudge","gap":1,"channel":"sms","archetype":"weekday_only"},{"d":"2025-06-21","type":"nudge","gap":1,"channel":"push","archetype":"weekday_only"},{"d":"2025-06-22","type":"recovered","streak":21,"archetype":"sticky_former","gap":4},{"d":"2025-06-22","type":"nudge","gap":1,"channel":"sms","archetype":"payday_spiker"},{"d":"2025-06-23","type":"nudge","gap":3,"channel":"push","archetype":"weekday_only"},{"d":"2025-06-23","type":"nudge","gap":7,"channel":"push","archetype":"payday_spiker"},{"d":"2025-06-23","type":"nudge","gap":3,"channel":"push","archetype":"weekday_only"},{"d":"2025-06-24","type":"nudge","gap":2,"channel":"push","archetype":"payday_spiker"},{"d":"2025-06-25","type":"recovered","streak":10,"archetype":"payday_spiker","gap":4},{"d":"2025-06-25","type":"nudge","gap":7,"channel":"push","archetype":"payday_spiker"},{"d":"2025-06-26","type":"nudge","gap":7,"channel":"push","archetype":"payday_spiker"},{"d":"2025-06-27","type":"recovered","streak":12,"archetype":"sticky_former","gap":2},{"d":"2025-06-27","type":"lapsed","streak":12,"archetype":"early_dropper","gap":null},{"d":"2025-06-27","type":"nudge","gap":2,"channel":"push","archetype":"weekday_only"},{"d":"2025-06-28","type":"recovered","streak":28,"archetype":"sticky_former","gap":2},{"d":"2025-06-28","type":"nudge","gap":3,"channel":"sms","archetype":"payday_spiker"},{"d":"2025-06-28","type":"nudge","gap":1,"channel":"push","archetype":"weekday_only"},{"d":"2025-06-29","type":"lapsed","streak":16,"archetype":"early_dropper","gap":null},{"d":"2025-06-30","type":"lapsed","streak":17,"archetype":"early_dropper","gap":null},{"d":"2025-07-01","type":"nudge","gap":5,"channel":"push","archetype":"weekday_only"},{"d":"2025-07-02","type":"nudge","gap":5,"channel":"push","archetype":"weekday_only"},{"d":"2025-07-03","type":"recovered","streak":14,"archetype":"sticky_former","gap":2},{"d":"2025-07-04","type":"recovered","streak":16,"archetype":"sticky_former","gap":2},{"d":"2025-07-04","type":"lapsed","streak":10,"archetype":"early_dropper","gap":null},{"d":"2025-07-04","type":"lapsed","streak":10,"archetype":"payday_spiker","gap":null},{"d":"2025-07-05","type":"recovered","streak":13,"archetype":"sticky_former","gap":5},{"d":"2025-07-05","type":"recovered","streak":34,"archetype":"sticky_former","gap":4},{"d":"2025-07-05","type":"recovered","streak":22,"archetype":"sticky_former","gap":2},{"d":"2025-07-05","type":"recovered","streak":13,"archetype":"payday_spiker","gap":2},{"d":"2025-07-05","type":"lapsed","streak":13,"archetype":"early_dropper","gap":null},{"d":"2025-07-05","type":"lapsed","streak":10,"archetype":"early_dropper","gap":null},{"d":"2025-07-05","type":"nudge","gap":2,"channel":"sms","archetype":"weekday_only"},{"d":"2025-07-06","type":"nudge","gap":2,"channel":"sms","archetype":"weekday_only"},{"d":"2025-07-06","type":"nudge","gap":2,"channel":"sms","archetype":"weekday_only"},{"d":"2025-07-07","type":"lapsed","streak":16,"archetype":"early_dropper","gap":null},{"d":"2025-07-07","type":"nudge","gap":3,"channel":"push","archetype":"weekday_only"},{"d":"2025-07-07","type":"nudge","gap":2,"channel":"push","archetype":"payday_spiker"},{"d":"2025-07-08","type":"lapsed","streak":29,"archetype":"payday_spiker","gap":null},{"d":"2025-07-09","type":"lapsed","streak":10,"archetype":"payday_spiker","gap":null},{"d":"2025-07-09","type":"lapsed","streak":11,"archetype":"early_dropper","gap":null},{"d":"2025-07-11","type":"recovered","streak":12,"archetype":"sticky_former","gap":4},{"d":"2025-07-11","type":"lapsed","streak":14,"archetype":"payday_spiker","gap":null},{"d":"2025-07-12","type":"recovered","streak":34,"archetype":"sticky_former","gap":2},{"d":"2025-07-12","type":"recovered","streak":27,"archetype":"sticky_former","gap":3},{"d":"2025-07-12","type":"nudge","gap":1,"channel":"push","archetype":"weekday_only"},{"d":"2025-07-13","type":"lapsed","streak":11,"archetype":"early_dropper","gap":null},{"d":"2025-07-13","type":"nudge","gap":1,"channel":"push","archetype":"weekday_only"},{"d":"2025-07-13","type":"nudge","gap":2,"channel":"email","archetype":"weekday_only"},{"d":"2025-07-14","type":"nudge","gap":3,"channel":"push","archetype":"sticky_former"},{"d":"2025-07-14","type":"nudge","gap":3,"channel":"push","archetype":"weekday_only"},{"d":"2025-07-15","type":"recovered","streak":70,"archetype":"sticky_former","gap":2},{"d":"2025-07-15","type":"nudge","gap":1,"channel":"push","archetype":"weekday_only"},{"d":"2025-07-15","type":"nudge","gap":3,"channel":"push","archetype":"weekday_only"},{"d":"2025-07-17","type":"recovered","streak":22,"archetype":"sticky_former","gap":2},{"d":"2025-07-17","type":"lapsed","streak":16,"archetype":"payday_spiker","gap":null},{"d":"2025-07-18","type":"recovered","streak":24,"archetype":"sticky_former","gap":2},{"d":"2025-07-18","type":"recovered","streak":21,"archetype":"sticky_former","gap":2},{"d":"2025-07-19","type":"recovered","streak":23,"archetype":"payday_spiker","gap":5},{"d":"2025-07-19","type":"recovered","streak":13,"archetype":"sticky_former","gap":2},{"d":"2025-07-19","type":"nudge","gap":1,"channel":"sms","archetype":"weekday_only"},{"d":"2025-07-20","type":"nudge","gap":2,"channel":"push","archetype":"sticky_former"},{"d":"2025-07-20","type":"nudge","gap":1,"channel":"push","archetype":"payday_spiker"},{"d":"2025-07-22","type":"nudge","gap":1,"channel":"sms","archetype":"sticky_former"},{"d":"2025-07-24","type":"nudge","gap":2,"channel":"push","archetype":"payday_spiker"},{"d":"2025-07-24","type":"nudge","gap":2,"channel":"sms","archetype":"payday_spiker"},{"d":"2025-07-26","type":"recovered","streak":41,"archetype":"sticky_former","gap":2},{"d":"2025-07-26","type":"nudge","gap":3,"channel":"push","archetype":"early_dropper"},{"d":"2025-07-28","type":"lapsed","streak":13,"archetype":"payday_spiker","gap":null},{"d":"2025-07-30","type":"recovered","streak":14,"archetype":"sticky_former","gap":3},{"d":"2025-07-30","type":"lapsed","streak":16,"archetype":"payday_spiker","gap":null},{"d":"2025-07-30","type":"nudge","gap":5,"channel":"push","archetype":"weekday_only"},{"d":"2025-07-31","type":"nudge","gap":1,"channel":"sms","archetype":"sticky_former"},{"d":"2025-07-31","type":"nudge","gap":3,"channel":"push","archetype":"weekday_only"},{"d":"2025-08-01","type":"recovered","streak":38,"archetype":"sticky_former","gap":2},{"d":"2025-08-02","type":"recovered","streak":28,"archetype":"sticky_former","gap":2},{"d":"2025-08-02","type":"recovered","streak":23,"archetype":"sticky_former","gap":4},{"d":"2025-08-03","type":"nudge","gap":2,"channel":"push","archetype":"weekday_only"},{"d":"2025-08-03","type":"nudge","gap":1,"channel":"push","archetype":"weekday_only"},{"d":"2025-08-04","type":"nudge","gap":3,"channel":"push","archetype":"sticky_former"},{"d":"2025-08-04","type":"nudge","gap":1,"channel":"push","archetype":"early_dropper"},{"d":"2025-08-06","type":"recovered","streak":12,"archetype":"sticky_former","gap":2},{"d":"2025-08-07","type":"recovered","streak":11,"archetype":"payday_spiker","gap":10},{"d":"2025-08-08","type":"recovered","streak":12,"archetype":"sticky_former","gap":3},{"d":"2025-08-08","type":"nudge","gap":7,"channel":"push","archetype":"weekday_only"},{"d":"2025-08-09","type":"recovered","streak":16,"archetype":"sticky_former","gap":2},{"d":"2025-08-09","type":"recovered","streak":25,"archetype":"sticky_former","gap":3},{"d":"2025-08-09","type":"lapsed","streak":11,"archetype":"payday_spiker","gap":null},{"d":"2025-08-09","type":"lapsed","streak":11,"archetype":"early_dropper","gap":null},{"d":"2025-08-09","type":"nudge","gap":1,"channel":"sms","archetype":"payday_spiker"},{"d":"2025-08-09","type":"nudge","gap":1,"channel":"sms","archetype":"weekday_only"},{"d":"2025-08-09","type":"nudge","gap":1,"channel":"push","archetype":"weekday_only"},{"d":"2025-08-09","type":"nudge","gap":2,"channel":"sms","archetype":"weekday_only"},{"d":"2025-08-10","type":"nudge","gap":2,"channel":"push","archetype":"weekday_only"},{"d":"2025-08-10","type":"nudge","gap":2,"channel":"push","archetype":"weekday_only"},{"d":"2025-08-11","type":"lapsed","streak":10,"archetype":"early_dropper","gap":null},{"d":"2025-08-11","type":"nudge","gap":5,"channel":"sms","archetype":"early_dropper"},{"d":"2025-08-12","type":"recovered","streak":26,"archetype":"sticky_former","gap":2},{"d":"2025-08-12","type":"lapsed","streak":11,"archetype":"payday_spiker","gap":null},{"d":"2025-08-12","type":"nudge","gap":3,"channel":"push","archetype":"sticky_former"},{"d":"2025-08-13","type":"recovered","streak":29,"archetype":"sticky_former","gap":2},{"d":"2025-08-13","type":"nudge","gap":5,"channel":"push","archetype":"weekday_only"},{"d":"2025-08-14","type":"lapsed","streak":17,"archetype":"payday_spiker","gap":null},{"d":"2025-08-14","type":"nudge","gap":5,"channel":"push","archetype":"payday_spiker"},{"d":"2025-08-16","type":"recovered","streak":20,"archetype":"sticky_former","gap":2},{"d":"2025-08-16","type":"lapsed","streak":13,"archetype":"early_dropper","gap":null},{"d":"2025-08-16","type":"nudge","gap":1,"channel":"sms","archetype":"sticky_former"},{"d":"2025-08-16","type":"nudge","gap":1,"channel":"push","archetype":"weekday_only"},{"d":"2025-08-17","type":"nudge","gap":1,"channel":"sms","archetype":"weekday_only"},{"d":"2025-08-20","type":"recovered","streak":10,"archetype":"sticky_former","gap":2},{"d":"2025-08-21","type":"lapsed","streak":11,"archetype":"payday_spiker","gap":null},{"d":"2025-08-22","type":"lapsed","streak":18,"archetype":"payday_spiker","gap":null},{"d":"2025-08-23","type":"recovered","streak":21,"archetype":"sticky_former","gap":9},{"d":"2025-08-23","type":"recovered","streak":19,"archetype":"sticky_former","gap":4},{"d":"2025-08-23","type":"recovered","streak":26,"archetype":"sticky_former","gap":6},{"d":"2025-08-24","type":"lapsed","streak":13,"archetype":"payday_spiker","gap":null},{"d":"2025-08-24","type":"nudge","gap":1,"channel":"push","archetype":"sticky_former"},{"d":"2025-08-24","type":"nudge","gap":2,"channel":"push","archetype":"weekday_only"},{"d":"2025-08-25","type":"recovered","streak":37,"archetype":"sticky_former","gap":4},{"d":"2025-08-27","type":"recovered","streak":10,"archetype":"sticky_former","gap":2},{"d":"2025-08-28","type":"recovered","streak":17,"archetype":"sticky_former","gap":3},{"d":"2025-08-29","type":"recovered","streak":27,"archetype":"sticky_former","gap":2},{"d":"2025-08-29","type":"nudge","gap":7,"channel":"push","archetype":"payday_spiker"},{"d":"2025-08-30","type":"recovered","streak":14,"archetype":"sticky_former","gap":4},{"d":"2025-08-30","type":"recovered","streak":12,"archetype":"sticky_former","gap":3},{"d":"2025-09-03","type":"nudge","gap":1,"channel":"sms","archetype":"sticky_former"},{"d":"2025-09-04","type":"recovered","streak":10,"archetype":"sticky_former","gap":4},{"d":"2025-09-05","type":"recovered","streak":12,"archetype":"sticky_former","gap":3},{"d":"2025-09-06","type":"recovered","streak":19,"archetype":"sticky_former","gap":2},{"d":"2025-09-06","type":"recovered","streak":18,"archetype":"sticky_former","gap":2},{"d":"2025-09-06","type":"recovered","streak":28,"archetype":"sticky_former","gap":2},{"d":"2025-09-06","type":"nudge","gap":1,"channel":"push","archetype":"weekday_only"},{"d":"2025-09-08","type":"nudge","gap":2,"channel":"push","archetype":"weekday_only"},{"d":"2025-09-08","type":"nudge","gap":1,"channel":"push","archetype":"payday_spiker"},{"d":"2025-09-08","type":"nudge","gap":3,"channel":"push","archetype":"weekday_only"},{"d":"2025-09-08","type":"nudge","gap":3,"channel":"push","archetype":"sticky_former"},{"d":"2025-09-10","type":"recovered","streak":10,"archetype":"sticky_former","gap":2},{"d":"2025-09-12","type":"nudge","gap":7,"channel":"push","archetype":"weekday_only"},{"d":"2025-09-13","type":"lapsed","streak":13,"archetype":"payday_spiker","gap":null},{"d":"2025-09-13","type":"nudge","gap":1,"channel":"push","archetype":"weekday_only"},{"d":"2025-09-15","type":"recovered","streak":29,"archetype":"sticky_former","gap":12},{"d":"2025-09-15","type":"lapsed","streak":15,"archetype":"payday_spiker","gap":null},{"d":"2025-09-15","type":"nudge","gap":3,"channel":"push","archetype":"weekday_only"},{"d":"2025-09-15","type":"nudge","gap":7,"channel":"sms","archetype":"payday_spiker"},{"d":"2025-09-15","type":"nudge","gap":3,"channel":"push","archetype":"weekday_only"},{"d":"2025-09-16","type":"recovered","streak":10,"archetype":"payday_spiker","gap":4},{"d":"2025-09-17","type":"recovered","streak":14,"archetype":"sticky_former","gap":2},{"d":"2025-09-18","type":"lapsed","streak":23,"archetype":"payday_spiker","gap":null},{"d":"2025-09-19","type":"recovered","streak":19,"archetype":"payday_spiker","gap":2},{"d":"2025-09-19","type":"recovered","streak":12,"archetype":"sticky_former","gap":2},{"d":"2025-09-20","type":"recovered","streak":13,"archetype":"sticky_former","gap":2},{"d":"2025-09-21","type":"nudge","gap":2,"channel":"sms","archetype":"weekday_only"},{"d":"2025-09-22","type":"nudge","gap":5,"channel":"push","archetype":"sticky_former"},{"d":"2025-09-23","type":"recovered","streak":19,"archetype":"sticky_former","gap":3},{"d":"2025-09-24","type":"nudge","gap":5,"channel":"push","archetype":"weekday_only"},{"d":"2025-09-25","type":"recovered","streak":19,"archetype":"payday_spiker","gap":7},{"d":"2025-09-26","type":"recovered","streak":32,"archetype":"sticky_former","gap":2},{"d":"2025-09-27","type":"recovered","streak":18,"archetype":"sticky_former","gap":3},{"d":"2025-09-27","type":"recovered","streak":11,"archetype":"sticky_former","gap":2},{"d":"2025-09-29","type":"nudge","gap":3,"channel":"sms","archetype":"payday_spiker"},{"d":"2025-09-29","type":"nudge","gap":3,"channel":"sms","archetype":"weekday_only"},{"d":"2025-10-02","type":"recovered","streak":17,"archetype":"sticky_former","gap":6},{"d":"2025-10-04","type":"recovered","streak":63,"archetype":"sticky_former","gap":2},{"d":"2025-10-04","type":"recovered","streak":13,"archetype":"weekday_only","gap":2},{"d":"2025-10-06","type":"recovered","streak":11,"archetype":"sticky_former","gap":2},{"d":"2025-10-08","type":"recovered","streak":11,"archetype":"sticky_former","gap":2},{"d":"2025-10-08","type":"recovered","streak":13,"archetype":"sticky_former","gap":2},{"d":"2025-10-09","type":"recovered","streak":17,"archetype":"payday_spiker","gap":4},{"d":"2025-10-10","type":"recovered","streak":40,"archetype":"sticky_former","gap":5},{"d":"2025-10-10","type":"recovered","streak":31,"archetype":"sticky_former","gap":3},{"d":"2025-10-10","type":"recovered","streak":22,"archetype":"sticky_former","gap":3},{"d":"2025-10-10","type":"recovered","streak":12,"archetype":"sticky_former","gap":3},{"d":"2025-10-10","type":"recovered","streak":57,"archetype":"sticky_former","gap":3},{"d":"2025-10-11","type":"lapsed","streak":12,"archetype":"payday_spiker","gap":null},{"d":"2025-10-11","type":"nudge","gap":7,"channel":"push","archetype":"payday_spiker"},{"d":"2025-10-13","type":"lapsed","streak":13,"archetype":"payday_spiker","gap":null},{"d":"2025-10-15","type":"nudge","gap":5,"channel":"sms","archetype":"weekday_only"},{"d":"2025-10-17","type":"recovered","streak":11,"archetype":"sticky_former","gap":2},{"d":"2025-10-17","type":"recovered","streak":12,"archetype":"sticky_former","gap":4},{"d":"2025-10-17","type":"recovered","streak":21,"archetype":"sticky_former","gap":2},{"d":"2025-10-17","type":"recovered","streak":68,"archetype":"sticky_former","gap":2},{"d":"2025-10-17","type":"recovered","streak":50,"archetype":"sticky_former","gap":4},{"d":"2025-10-18","type":"recovered","streak":22,"archetype":"sticky_former","gap":2},{"d":"2025-10-18","type":"recovered","streak":11,"archetype":"sticky_former","gap":2},{"d":"2025-10-18","type":"nudge","gap":1,"channel":"push","archetype":"sticky_former"},{"d":"2025-10-19","type":"nudge","gap":2,"channel":"push","archetype":"weekday_only"},{"d":"2025-10-20","type":"recovered","streak":21,"archetype":"sticky_former","gap":2},{"d":"2025-10-20","type":"nudge","gap":3,"channel":"push","archetype":"weekday_only"},{"d":"2025-10-21","type":"lapsed","streak":16,"archetype":"payday_spiker","gap":null},{"d":"2025-10-22","type":"recovered","streak":14,"archetype":"sticky_former","gap":3},{"d":"2025-10-22","type":"lapsed","streak":12,"archetype":"payday_spiker","gap":null},{"d":"2025-10-23","type":"nudge","gap":2,"channel":"push","archetype":"payday_spiker"},{"d":"2025-10-24","type":"recovered","streak":26,"archetype":"sticky_former","gap":8},{"d":"2025-10-25","type":"nudge","gap":1,"channel":"push","archetype":"weekday_only"},{"d":"2025-10-27","type":"recovered","streak":30,"archetype":"sticky_former","gap":3},{"d":"2025-10-29","type":"recovered","streak":11,"archetype":"sticky_former","gap":3},{"d":"2025-10-30","type":"recovered","streak":11,"archetype":"sticky_former","gap":2},{"d":"2025-10-30","type":"nudge","gap":1,"channel":"email","archetype":"payday_spiker"},{"d":"2025-10-31","type":"recovered","streak":40,"archetype":"sticky_former","gap":3},{"d":"2025-10-31","type":"nudge","gap":7,"channel":"push","archetype":"weekday_only"},{"d":"2025-11-01","type":"recovered","streak":24,"archetype":"sticky_former","gap":3},{"d":"2025-11-01","type":"recovered","streak":14,"archetype":"sticky_former","gap":2},{"d":"2025-11-01","type":"nudge","gap":7,"channel":"push","archetype":"sticky_former"},{"d":"2025-11-02","type":"nudge","gap":1,"channel":"push","archetype":"sticky_former"},{"d":"2025-11-02","type":"nudge","gap":2,"channel":"email","archetype":"weekday_only"},{"d":"2025-11-02","type":"nudge","gap":5,"channel":"push","archetype":"payday_spiker"},{"d":"2025-11-03","type":"recovered","streak":12,"archetype":"sticky_former","gap":2},{"d":"2025-11-03","type":"nudge","gap":3,"channel":"email","archetype":"payday_spiker"},{"d":"2025-11-06","type":"recovered","streak":18,"archetype":"sticky_former","gap":6},{"d":"2025-11-07","type":"nudge","gap":3,"channel":"push","archetype":"weekday_only"},{"d":"2025-11-08","type":"recovered","streak":20,"archetype":"sticky_former","gap":5},{"d":"2025-11-09","type":"nudge","gap":2,"channel":"push","archetype":"weekday_only"},{"d":"2025-11-09","type":"nudge","gap":2,"channel":"push","archetype":"sticky_former"},{"d":"2025-11-09","type":"nudge","gap":2,"channel":"push","archetype":"weekday_only"},{"d":"2025-11-12","type":"recovered","streak":11,"archetype":"sticky_former","gap":3},{"d":"2025-11-14","type":"recovered","streak":15,"archetype":"sticky_former","gap":2},{"d":"2025-11-14","type":"recovered","streak":15,"archetype":"payday_spiker","gap":2},{"d":"2025-11-15","type":"recovered","streak":26,"archetype":"sticky_former","gap":3},{"d":"2025-11-15","type":"recovered","streak":18,"archetype":"sticky_former","gap":4},{"d":"2025-11-15","type":"nudge","gap":1,"channel":"push","archetype":"sticky_former"},{"d":"2025-11-15","type":"nudge","gap":1,"channel":"push","archetype":"sticky_former"},{"d":"2025-11-16","type":"recovered","streak":43,"archetype":"sticky_former","gap":2},{"d":"2025-11-16","type":"recovered","streak":20,"archetype":"sticky_former","gap":3},{"d":"2025-11-16","type":"recovered","streak":17,"archetype":"sticky_former","gap":4},{"d":"2025-11-16","type":"nudge","gap":2,"channel":"push","archetype":"payday_spiker"},{"d":"2025-11-16","type":"nudge","gap":2,"channel":"sms","archetype":"weekday_only"},{"d":"2025-11-18","type":"nudge","gap":1,"channel":"push","archetype":"weekday_only"},{"d":"2025-11-21","type":"recovered","streak":17,"archetype":"sticky_former","gap":2},{"d":"2025-11-22","type":"recovered","streak":11,"archetype":"sticky_former","gap":5},{"d":"2025-11-22","type":"nudge","gap":1,"channel":"push","archetype":"weekday_only"},{"d":"2025-11-22","type":"nudge","gap":1,"channel":"push","archetype":"sticky_former"},{"d":"2025-11-23","type":"nudge","gap":1,"channel":"push","archetype":"weekday_only"},{"d":"2025-11-24","type":"nudge","gap":3,"channel":"push","archetype":"weekday_only"},{"d":"2025-11-25","type":"recovered","streak":11,"archetype":"sticky_former","gap":5},{"d":"2025-11-25","type":"nudge","gap":1,"channel":"push","archetype":"sticky_former"},{"d":"2025-11-29","type":"recovered","streak":11,"archetype":"sticky_former","gap":3},{"d":"2025-11-29","type":"nudge","gap":2,"channel":"push","archetype":"weekday_only"},{"d":"2025-11-30","type":"nudge","gap":1,"channel":"push","archetype":"sticky_former"},{"d":"2025-12-01","type":"nudge","gap":3,"channel":"push","archetype":"weekday_only"},{"d":"2025-12-02","type":"recovered","streak":24,"archetype":"sticky_former","gap":2},{"d":"2025-12-04","type":"recovered","streak":18,"archetype":"sticky_former","gap":6},{"d":"2025-12-04","type":"recovered","streak":10,"archetype":"sticky_former","gap":3},{"d":"2025-12-06","type":"recovered","streak":21,"archetype":"sticky_former","gap":4},{"d":"2025-12-06","type":"nudge","gap":2,"channel":"sms","archetype":"sticky_former"},{"d":"2025-12-06","type":"nudge","gap":3,"channel":"push","archetype":"sticky_former"},{"d":"2025-12-08","type":"nudge","gap":2,"channel":"email","archetype":"weekday_only"},{"d":"2025-12-09","type":"recovered","streak":23,"archetype":"sticky_former","gap":3},{"d":"2025-12-10","type":"recovered","streak":15,"archetype":"sticky_former","gap":2},{"d":"2025-12-11","type":"recovered","streak":11,"archetype":"sticky_former","gap":5},{"d":"2025-12-11","type":"recovered","streak":17,"archetype":"sticky_former","gap":4},{"d":"2025-12-12","type":"recovered","streak":17,"archetype":"sticky_former","gap":3},{"d":"2025-12-12","type":"nudge","gap":1,"channel":"sms","archetype":"sticky_former"},{"d":"2025-12-13","type":"recovered","streak":21,"archetype":"sticky_former","gap":2},{"d":"2025-12-13","type":"recovered","streak":20,"archetype":"sticky_former","gap":3},{"d":"2025-12-13","type":"recovered","streak":11,"archetype":"sticky_former","gap":3},{"d":"2025-12-14","type":"nudge","gap":2,"channel":"push","archetype":"weekday_only"},{"d":"2025-12-15","type":"recovered","streak":19,"archetype":"sticky_former","gap":4},{"d":"2025-12-16","type":"recovered","streak":16,"archetype":"sticky_former","gap":2},{"d":"2025-12-16","type":"recovered","streak":28,"archetype":"payday_spiker","gap":3},{"d":"2025-12-19","type":"recovered","streak":11,"archetype":"sticky_former","gap":3},{"d":"2025-12-19","type":"recovered","streak":30,"archetype":"sticky_former","gap":4},{"d":"2025-12-19","type":"recovered","streak":10,"archetype":"sticky_former","gap":2},{"d":"2025-12-19","type":"recovered","streak":20,"archetype":"sticky_former","gap":2},{"d":"2025-12-20","type":"recovered","streak":18,"archetype":"sticky_former","gap":2},{"d":"2025-12-20","type":"recovered","streak":21,"archetype":"payday_spiker","gap":2},{"d":"2025-12-20","type":"recovered","streak":16,"archetype":"sticky_former","gap":2},{"d":"2025-12-20","type":"lapsed","streak":30,"archetype":"sticky_former","gap":null},{"d":"2025-12-20","type":"nudge","gap":1,"channel":"push","archetype":"payday_spiker"},{"d":"2025-12-21","type":"recovered","streak":14,"archetype":"sticky_former","gap":3},{"d":"2025-12-23","type":"recovered","streak":37,"archetype":"sticky_former","gap":5},{"d":"2025-12-23","type":"recovered","streak":23,"archetype":"sticky_former","gap":2},{"d":"2025-12-25","type":"recovered","streak":30,"archetype":"sticky_former","gap":2},{"d":"2025-12-25","type":"nudge","gap":1,"channel":"push","archetype":"payday_spiker"},{"d":"2025-12-25","type":"nudge","gap":1,"channel":"email","archetype":"weekday_only"},{"d":"2025-12-26","type":"recovered","streak":13,"archetype":"sticky_former","gap":2},{"d":"2025-12-27","type":"recovered","streak":21,"archetype":"sticky_former","gap":2},{"d":"2025-12-27","type":"lapsed","streak":23,"archetype":"sticky_former","gap":null},{"d":"2025-12-27","type":"lapsed","streak":10,"archetype":"sticky_former","gap":null},{"d":"2025-12-27","type":"lapsed","streak":14,"archetype":"sticky_former","gap":null},{"d":"2025-12-28","type":"lapsed","streak":43,"archetype":"sticky_former","gap":null},{"d":"2025-12-28","type":"lapsed","streak":17,"archetype":"payday_spiker","gap":null},{"d":"2025-12-28","type":"nudge","gap":1,"channel":"push","archetype":"sticky_former"},{"d":"2025-12-28","type":"nudge","gap":2,"channel":"push","archetype":"weekday_only"},{"d":"2025-12-28","type":"nudge","gap":2,"channel":"push","archetype":"weekday_only"},{"d":"2025-12-29","type":"lapsed","streak":16,"archetype":"sticky_former","gap":null},{"d":"2025-12-29","type":"lapsed","streak":19,"archetype":"sticky_former","gap":null},{"d":"2025-12-29","type":"nudge","gap":2,"channel":"push","archetype":"sticky_former"},{"d":"2025-12-30","type":"lapsed","streak":22,"archetype":"sticky_former","gap":null},{"d":"2025-12-30","type":"lapsed","streak":22,"archetype":"sticky_former","gap":null},{"d":"2025-12-30","type":"lapsed","streak":10,"archetype":"sticky_former","gap":null},{"d":"2025-12-30","type":"lapsed","streak":10,"archetype":"sticky_former","gap":null},{"d":"2025-12-30","type":"lapsed","streak":16,"archetype":"sticky_former","gap":null}],"bands":[{"band":"1-2","n":252},{"band":"3-6","n":421},{"band":"30+","n":95},{"band":"7-13","n":281},{"band":"14-29","n":229}],"cohort":[{"week":"2025-01-27","sz":52,"d1":59.6,"d7":94.2,"d30":57.7},{"week":"2025-02-03","sz":74,"d1":73.0,"d7":89.2,"d30":54.1},{"week":"2025-02-10","sz":82,"d1":70.7,"d7":82.9,"d30":53.7},{"week":"2025-02-17","sz":91,"d1":57.1,"d7":82.4,"d30":63.7},{"week":"2025-02-24","sz":106,"d1":64.2,"d7":84.0,"d30":64.2},{"week":"2025-03-03","sz":121,"d1":71.9,"d7":87.6,"d30":47.1},{"week":"2025-03-10","sz":140,"d1":70.7,"d7":87.1,"d30":62.1},{"week":"2025-03-17","sz":163,"d1":76.1,"d7":90.2,"d30":50.3},{"week":"2025-03-24","sz":164,"d1":70.1,"d7":86.0,"d30":52.4},{"week":"2025-03-31","sz":172,"d1":74.4,"d7":88.4,"d30":52.3},{"week":"2025-04-07","sz":196,"d1":66.8,"d7":83.2,"d30":56.6},{"week":"2025-04-14","sz":201,"d1":73.6,"d7":90.0,"d30":51.2},{"week":"2025-04-21","sz":202,"d1":69.8,"d7":89.6,"d30":53.5},{"week":"2025-04-28","sz":206,"d1":65.0,"d7":85.9,"d30":51.9},{"week":"2025-05-05","sz":248,"d1":66.9,"d7":85.1,"d30":54.0},{"week":"2025-05-12","sz":259,"d1":70.3,"d7":86.1,"d30":52.9},{"week":"2025-05-19","sz":262,"d1":72.5,"d7":86.3,"d30":48.9},{"week":"2025-05-26","sz":268,"d1":67.9,"d7":87.7,"d30":51.9},{"week":"2025-06-02","sz":284,"d1":70.1,"d7":86.3,"d30":51.8},{"week":"2025-06-09","sz":279,"d1":65.9,"d7":85.3,"d30":50.2},{"week":"2025-06-16","sz":295,"d1":66.4,"d7":86.4,"d30":54.6},{"week":"2025-06-23","sz":263,"d1":66.9,"d7":85.9,"d30":51.3},{"week":"2025-06-30","sz":242,"d1":69.0,"d7":85.1,"d30":52.1},{"week":"2025-07-07","sz":177,"d1":71.8,"d7":90.4,"d30":60.5},{"week":"2025-07-14","sz":157,"d1":65.0,"d7":87.9,"d30":56.7},{"week":"2025-07-21","sz":95,"d1":68.4,"d7":85.3,"d30":66.3},{"week":"2025-07-28","sz":78,"d1":71.8,"d7":92.3,"d30":57.7}]}</script>
 <script>
-(function () {
-  const css = getComputedStyle(document.documentElement);
-  const v = (name) => css.getPropertyValue(name).trim();
+(function(){
+"use strict";
+const DATA = JSON.parse(document.getElementById("cadence-data").textContent);
+const css = getComputedStyle(document.documentElement);
+const v = n => css.getPropertyValue(n).trim();
 
-  function axis(svg, x0, x1, y0, y1) {
-    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    line.setAttribute("x1", x0); line.setAttribute("x2", x1);
-    line.setAttribute("y1", y0); line.setAttribute("y2", y1);
-    line.setAttribute("class", "grid-line");
-    svg.appendChild(line);
+/* ---------- level toggle ---------- */
+document.querySelectorAll(".level-toggle button").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    document.querySelectorAll(".level-toggle button").forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active");
+    document.body.classList.toggle("mode-advanced", btn.dataset.level==="advanced");
+    document.body.classList.toggle("mode-simple", btn.dataset.level==="simple");
+  });
+});
+
+/* ---------- count-up KPIs ----------
+   Runs immediately on load rather than behind an IntersectionObserver: the
+   hero KPI strip is always above the fold, and headless/no-compositor
+   environments (screenshot tooling, some in-app browsers) don't reliably
+   fire intersection callbacks, which previously left these stuck at 0. */
+function countUp(el, to, dur){
+  const start = performance.now();
+  function step(now){
+    const p = Math.min(1,(now-start)/dur);
+    const eased = 1-Math.pow(1-p,3);
+    el.textContent = Math.round(to*eased).toLocaleString();
+    if(p<1) requestAnimationFrame(step);
   }
-  function text(svg, x, y, s, cls, anchor) {
-    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    t.setAttribute("x", x); t.setAttribute("y", y);
-    t.setAttribute("class", cls);
-    t.setAttribute("text-anchor", anchor || "middle");
-    t.textContent = s;
-    svg.appendChild(t);
-  }
-  function rect(svg, x, y, w, h, fill, rx) {
-    const r = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    r.setAttribute("x", x); r.setAttribute("y", y);
-    r.setAttribute("width", w); r.setAttribute("height", h);
-    r.setAttribute("fill", fill);
-    r.setAttribute("rx", rx || 3);
+  requestAnimationFrame(step);
+}
+document.querySelectorAll("[data-count]").forEach(el=>countUp(el, parseInt(el.dataset.count,10), 1400));
+
+/* ---------- chart helpers ---------- */
+function el(tag, attrs){ const e=document.createElementNS("http://www.w3.org/2000/svg",tag);
+  for(const k in attrs) e.setAttribute(k, attrs[k]); return e; }
+
+function barChart(svg, data, opts){
+  svg.innerHTML="";
+  const W=svg.viewBox.baseVal.width, H=svg.viewBox.baseVal.height;
+  const padL=opts.padL||38, padB=32, padT=10, padR=opts.padR||8;
+  const plotW=W-padL-padR, plotH=H-padT-padB;
+  const maxV=opts.max||Math.max(...data.map(d=>d.v))*1.15;
+  const n=data.length, gap=plotW/n, bw=gap*(opts.bwFrac||0.55);
+  [0,.25,.5,.75,1].forEach(f=>{
+    const y=padT+plotH*(1-f);
+    svg.appendChild(el("line",{x1:padL,x2:W-padR,y1:y,y2:y,class:"grid-line"}));
+    svg.appendChild(Object.assign(el("text",{x:padL-7,y:y+3,class:"axis-text","text-anchor":"end"}),
+      {textContent: opts.fmtY?opts.fmtY(maxV*f):Math.round(maxV*f)}));
+  });
+  data.forEach((d,i)=>{
+    const cx=padL+gap*i+gap/2, h=(d.v/maxV)*plotH, y=padT+plotH-h;
+    const r=el("rect",{x:cx-bw/2,y,width:bw,height:h,rx:4,fill:d.color||v("--blue")});
     svg.appendChild(r);
+    svg.appendChild(Object.assign(el("text",{x:cx,y:y-6,class:"val-text","text-anchor":"middle"}),
+      {textContent: opts.fmtV?opts.fmtV(d.v):d.v}));
+    svg.appendChild(Object.assign(el("text",{x:cx,y:H-padB+16,class:"axis-text","text-anchor":"middle"}),
+      {textContent:d.label}));
+  });
+}
+
+function lineChart(svg, data, opts){
+  svg.innerHTML="";
+  const W=svg.viewBox.baseVal.width, H=svg.viewBox.baseVal.height;
+  const padL=42, padB=28, padT=14, padR=16;
+  const plotW=W-padL-padR, plotH=H-padT-padB;
+  const maxV=opts.max||100;
+  const xs=data.map(d=>d.x), minX=Math.min(...xs), maxX=Math.max(...xs);
+  [0,.25,.5,.75,1].forEach(f=>{
+    const y=padT+plotH*(1-f);
+    svg.appendChild(el("line",{x1:padL,x2:W-padR,y1:y,y2:y,class:"grid-line"}));
+    svg.appendChild(Object.assign(el("text",{x:padL-7,y:y+3,class:"axis-text","text-anchor":"end"}),
+      {textContent: Math.round(maxV*f)+(opts.pct?"%":"")}));
+  });
+  const pts=data.map(d=>[padL+((d.x-minX)/(maxX-minX))*plotW, padT+plotH*(1-d.v/maxV), d]);
+  svg.appendChild(el("path",{d:pts.map((p,i)=>(i===0?"M":"L")+p[0]+" "+p[1]).join(" "),
+    fill:"none",stroke:v("--blue"),"stroke-width":3,"stroke-linecap":"round","stroke-linejoin":"round"}));
+  pts.forEach(([x,y,d])=>{
+    svg.appendChild(el("circle",{cx:x,cy:y,r:d.emph?6:4,fill:d.emph?v("--orange"):v("--blue"),
+      stroke:v("--surface"),"stroke-width":2}));
+    svg.appendChild(Object.assign(el("text",{x,y:y-12,class:"val-text","text-anchor":"middle"}),
+      {textContent:d.v+"%"}));
+    svg.appendChild(Object.assign(el("text",{x,y:H-padB+16,class:"axis-text","text-anchor":"middle"}),
+      {textContent:"Day "+d.x}));
+  });
+}
+
+function forestChart(svg, data){
+  svg.innerHTML="";
+  const W=svg.viewBox.baseVal.width, H=svg.viewBox.baseVal.height;
+  const padL=150, padR=60, padT=14, padB=30;
+  const plotW=W-padL-padR;
+  const xMin=0.8, xMax=1.25;
+  const xScale=x=>padL+((x-xMin)/(xMax-xMin))*plotW;
+  const rowH=(H-padT-padB)/data.length;
+  const zeroX=xScale(1);
+  svg.appendChild(el("line",{x1:zeroX,x2:zeroX,y1:padT,y2:H-padB,stroke:v("--border-strong"),"stroke-width":1}));
+  data.forEach((d,i)=>{
+    const y=padT+rowH*i+rowH/2;
+    const color = !d.sig ? v("--ink-3") : (d.hr>1 ? v("--critical") : v("--good"));
+    svg.appendChild(el("line",{x1:xScale(Math.max(d.lo,xMin)),x2:xScale(Math.min(d.hi,xMax)),y1:y,y2:y,
+      stroke:color,"stroke-width":2.5,opacity:.6}));
+    svg.appendChild(el("circle",{cx:xScale(d.hr),cy:y,r:5,fill:color}));
+    svg.appendChild(Object.assign(el("text",{x:10,y:y+4,class:"axis-text"}),{textContent:d.label}));
+    svg.appendChild(Object.assign(el("text",{x:xScale(Math.min(d.hi,xMax))+8,y:y+4,class:"val-text"}),
+      {textContent:d.hr.toFixed(2)+(d.sig?"":" n.s.")}));
+  });
+}
+
+/* ---------- static charts ---------- */
+lineChart(document.getElementById("chartRecovery"), [
+  {x:1,v:93},{x:3,v:84},{x:5,v:69,emph:true},{x:7,v:51},{x:14,v:20}
+], {pct:true});
+
+forestChart(document.getElementById("chartHazard"), [
+  {label:"1st streak",hr:1.18,lo:1.14,hi:1.21,sig:true},
+  {label:"KYC incomplete",hr:1.07,lo:0.93,hi:1.22,sig:false},
+  {label:"Referral",hr:1.02,lo:0.95,hi:1.10,sig:false},
+  {label:"Weekend signup",hr:0.97,lo:0.93,hi:1.01,sig:false},
+  {label:"City tier 2",hr:0.98,lo:0.94,hi:1.03,sig:false},
+  {label:"KYC weeks",hr:0.96,lo:0.82,hi:1.13,sig:false},
+]);
+
+barChart(document.getElementById("chartNudge"), [
+  {label:"1",v:3.7,color:v("--ink-3")},{label:"2",v:3.8,color:v("--ink-3")},
+  {label:"3",v:3.6,color:v("--ink-3")},{label:"5",v:7.7,color:v("--orange")},
+  {label:"7",v:4.1,color:v("--ink-3")},
+], {max:9, fmtV:n=>"+"+n.toFixed(1)});
+
+barChart(document.getElementById("chartConsistency"), [
+  {label:"10%",v:2435,color:v("--blue")},{label:"20%",v:477,color:v("--blue")},
+  {label:"30%",v:286,color:v("--blue")},{label:"40%",v:206,color:v("--blue")},
+  {label:"50%",v:188,color:v("--blue")},{label:"60%",v:116,color:v("--blue")},
+  {label:"70%",v:78,color:v("--blue")},{label:"80%",v:173,color:v("--blue")},
+  {label:"90%",v:834,color:v("--green")},{label:"100%",v:207,color:v("--green")},
+], {max:2600, fmtV:n=>n>=1000?(n/1000).toFixed(1)+"k":n, bwFrac:.65});
+
+const bandOrder=["1-2","3-6","7-13","14-29","30+"];
+const bandMap=Object.fromEntries(DATA.bands.map(b=>[b.band,b.n]));
+barChart(document.getElementById("chartBands"), bandOrder.map(b=>({label:b+"d",v:bandMap[b]||0,color:v("--violet")})),
+  {max:Math.max(...Object.values(bandMap))*1.2});
+
+/* ---------- cohort table ---------- */
+const tbody=document.querySelector("#cohortTable tbody");
+DATA.cohort.forEach(c=>{
+  const tr=document.createElement("tr");
+  tr.innerHTML=`<td>${new Date(c.week).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"})}</td>
+    <td class="num">${c.sz}</td><td class="num">${c.d1}</td><td class="num">${c.d7}</td><td class="num">${c.d30}</td>`;
+  tbody.appendChild(tr);
+});
+
+/* ---------- quality grid ---------- */
+const quality=[
+  {code:"DQ-01",title:"Null transaction amounts",sev:"high",pass:false,rows:"5,593 rows &middot; 1.50%",detail:"Successful rows recording no amount understate revenue silently."},
+  {code:"DQ-02",title:"Duplicate transactions",sev:"high",pass:false,rows:"3,697 user-days &middot; 1,884 users",detail:"A duplicate shatters one real streak into several in the gaps-and-islands query."},
+  {code:"DQ-03",title:"Transactions before signup",sev:"medium",pass:false,rows:"1,472 rows &middot; 1,094 users",detail:"Client-timestamp trust produces negative day-since-signup indices."},
+  {code:"DQ-04",title:"Undocumented status values",sev:"high",pass:false,rows:"747 rows, wrong-case SUCCESS",detail:"Invisible to every status='success' filter while being a real contribution."},
+  {code:"DQ-05",title:"Unverified users transacting",sev:"high",pass:false,rows:"557 rows &middot; 450 users &middot; &#8377;10.7L",detail:"Missing KYC gate or stale status field, the data alone cannot say which."},
+  {code:"DQ-06",title:"KYC status/timestamp mismatch",sev:"medium",pass:true,rows:"0 rows",detail:"Passes today. Kept because the two fields are written separately and can drift."},
+];
+const qg=document.getElementById("qualityGrid");
+quality.forEach(q=>{
+  const div=document.createElement("div");
+  div.className="q-card reveal";
+  div.innerHTML=`<div class="q-top"><span class="q-code">${q.code}</span>
+    <span class="chip ${q.pass?"pass":"fail"}">${q.pass?"Pass":"Fail"}</span></div>
+    <div class="q-title">${q.title}</div><div class="q-detail">${q.detail}</div>
+    <div class="q-rows">${q.rows}</div>`;
+  qg.appendChild(div);
+});
+
+/* ---------- live replay engine ---------- */
+const daily = DATA.daily; // [{d,u,amt}]
+const feed = DATA.feed;   // sorted [{d,type,...}]
+const replayDate=document.getElementById("replayDate");
+const kpiActive=document.getElementById("kpiActive");
+const kpiInvested=document.getElementById("kpiInvested");
+const scrub=document.getElementById("scrub");
+const feedList=document.getElementById("feedList");
+const chartReplay=document.getElementById("chartReplay");
+scrub.max = daily.length-1;
+
+let idx=0, playing=false, speed=4, feedPtr=0, cumInvested=0, rafId=null, lastTick=0;
+
+function fmtDate(s){ return new Date(s).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}); }
+function fmtINR(n){ if(n>=100000) return "₹"+(n/100000).toFixed(1)+"L"; if(n>=1000) return "₹"+(n/1000).toFixed(1)+"k"; return "₹"+Math.round(n); }
+
+function drawReplayChart(uptoIdx){
+  const W=640,H=220,padL=42,padB=22,padT=10,padR=10;
+  const plotW=W-padL-padR, plotH=H-padT-padB;
+  const maxU = Math.max(...daily.map(d=>d.u))*1.1;
+  chartReplay.innerHTML="";
+  [0,.5,1].forEach(f=>{
+    const y=padT+plotH*(1-f);
+    chartReplay.appendChild(el("line",{x1:padL,x2:W-padR,y1:y,y2:y,class:"grid-line"}));
+    chartReplay.appendChild(Object.assign(el("text",{x:padL-7,y:y+3,class:"axis-text","text-anchor":"end"}),
+      {textContent:Math.round(maxU*f)}));
+  });
+  const visible = daily.slice(0, uptoIdx+1);
+  if(visible.length<2) return;
+  const pts = visible.map((d,i)=>[padL+(i/(daily.length-1))*plotW, padT+plotH*(1-d.u/maxU)]);
+  chartReplay.appendChild(el("path",{d:pts.map((p,i)=>(i===0?"M":"L")+p[0]+" "+p[1]).join(" "),
+    fill:"none",stroke:v("--blue"),"stroke-width":2.5,"stroke-linecap":"round","stroke-linejoin":"round"}));
+  const last=pts[pts.length-1];
+  chartReplay.appendChild(el("circle",{cx:last[0],cy:last[1],r:5,fill:v("--orange"),stroke:v("--surface"),"stroke-width":2}));
+  chartReplay.appendChild(Object.assign(el("text",{x:padL,y:H-4,class:"axis-text"}),{textContent:fmtDate(daily[0].d)}));
+  chartReplay.appendChild(Object.assign(el("text",{x:W-padR,y:H-4,class:"axis-text","text-anchor":"end"}),{textContent:fmtDate(daily[daily.length-1].d)}));
+}
+
+const feedIcons={recovered:"&#10003;",lapsed:"&times;",nudge:"&#9993;"};
+function feedLine(ev){
+  if(ev.type==="nudge") return `<b>Nudge sent</b> (${ev.channel}) after ${ev.gap}d missed &middot; ${ev.archetype.replace("_"," ")}`;
+  if(ev.type==="recovered") return `Streak of <b>${ev.streak}d</b> broke, recovered after ${ev.gap??"?"}d &middot; ${ev.archetype.replace("_"," ")}`;
+  return `Streak of <b>${ev.streak}d</b> broke, no recovery yet &middot; ${ev.archetype.replace("_"," ")}`;
+}
+function pushFeed(ev){
+  if(feedList.querySelector(".feed-empty")) feedList.innerHTML="";
+  const div=document.createElement("div");
+  div.className="feed-item";
+  div.innerHTML=`<div class="feed-icon ${ev.type}">${feedIcons[ev.type]}</div>
+    <div class="feed-text">${feedLine(ev)}</div><div class="feed-time">${fmtDate(ev.d)}</div>`;
+  feedList.appendChild(div);
+  feedList.scrollTop = feedList.scrollHeight;
+  while(feedList.children.length>60) feedList.removeChild(feedList.firstChild);
+}
+
+function renderAt(i){
+  i=Math.max(0,Math.min(daily.length-1,i));
+  idx=i;
+  const row=daily[i];
+  replayDate.textContent=fmtDate(row.d);
+  kpiActive.textContent=row.u.toLocaleString();
+  cumInvested = daily.slice(0,i+1).reduce((s,d)=>s+parseFloat(d.amt),0);
+  kpiInvested.textContent=fmtINR(cumInvested);
+  scrub.value=i;
+  drawReplayChart(i);
+  while(feedPtr<feed.length && feed[feedPtr].d <= row.d){ pushFeed(feed[feedPtr]); feedPtr++; }
+}
+
+function resetReplay(){
+  feedPtr=0; feedList.innerHTML='<div class="feed-empty">Press play to start the replay.</div>';
+  renderAt(0);
+}
+
+function tick(now){
+  if(!playing) return;
+  if(now-lastTick > (140/speed)){
+    lastTick=now;
+    if(idx>=daily.length-1){ playing=false; setPlayIcon(); return; }
+    renderAt(idx+1);
   }
+  rafId=requestAnimationFrame(tick);
+}
+function setPlayIcon(){
+  document.getElementById("playIcon").style.display=playing?"none":"block";
+  document.getElementById("pauseIcon").style.display=playing?"block":"none";
+}
+document.getElementById("playBtn").addEventListener("click",()=>{
+  playing=!playing; setPlayIcon();
+  if(playing){ lastTick=0; rafId=requestAnimationFrame(tick); }
+});
+document.getElementById("resetBtn").addEventListener("click",()=>{ playing=false; setPlayIcon(); resetReplay(); });
+document.querySelectorAll(".speed-group button").forEach(b=>{
+  b.addEventListener("click",()=>{
+    document.querySelectorAll(".speed-group button").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active"); speed=parseFloat(b.dataset.speed);
+  });
+});
+scrub.addEventListener("input",()=>{ playing=false; setPlayIcon(); feedPtr=0; feedList.innerHTML=""; renderAt(parseInt(scrub.value,10)); });
 
-  function barChart(id, data, opts) {
-    const svg = document.getElementById(id);
-    const W = svg.viewBox.baseVal.width, H = svg.viewBox.baseVal.height;
-    const padL = opts.padL || 40, padB = 34, padT = 10, padR = opts.padR || 10;
-    const plotW = W - padL - padR, plotH = H - padT - padB;
-    const maxV = opts.max || Math.max(...data.map(d => d.v)) * 1.15;
-    const n = data.length;
-    const bw = (plotW / n) * (opts.bwFrac || 0.55);
-    const gap = plotW / n;
+resetReplay();
 
-    [0, 0.25, 0.5, 0.75, 1].forEach(f => {
-      const y = padT + plotH * (1 - f);
-      axis(svg, padL, W - padR, y, y);
-      text(svg, padL - 8, y + 3, opts.fmtY ? opts.fmtY(maxV * f) : Math.round(maxV * f), "axis-text", "end");
-    });
+/* autoplay once visible, with a timed fallback for environments where
+   IntersectionObserver callbacks don't fire (headless capture, some
+   in-app browsers) so the replay is never permanently stuck at day 1 */
+function startAutoplay(){
+  if(idx===0 && !playing){ playing=true; setPlayIcon(); lastTick=0; rafId=requestAnimationFrame(tick); }
+}
+if("IntersectionObserver" in window){
+  const replayIo=new IntersectionObserver(entries=>{
+    entries.forEach(e=>{ if(e.isIntersecting){ startAutoplay(); replayIo.disconnect(); } });
+  },{threshold:.4});
+  replayIo.observe(document.getElementById("replay"));
+}
+setTimeout(startAutoplay, 1500);
 
-    data.forEach((d, i) => {
-      const cx = padL + gap * i + gap / 2;
-      const h = (d.v / maxV) * plotH;
-      const y = padT + plotH - h;
-      rect(svg, cx - bw / 2, y, bw, h, d.color || v("--blue"), 4);
-      text(svg, cx, y - 6, opts.fmtV ? opts.fmtV(d.v) : d.v, "val-text");
-      text(svg, cx, H - padB + 16, d.label, "axis-text");
-      if (d.emph) {
-        text(svg, cx, H - padB + 30, d.emph, "bar-label");
-      }
-    });
-  }
-
-  function lineChart(id, data, opts) {
-    const svg = document.getElementById(id);
-    const W = svg.viewBox.baseVal.width, H = svg.viewBox.baseVal.height;
-    const padL = 42, padB = 30, padT = 14, padR = 16;
-    const plotW = W - padL - padR, plotH = H - padT - padB;
-    const maxV = 100;
-    const xs = data.map(d => d.x);
-    const minX = Math.min(...xs), maxX = Math.max(...xs);
-
-    [0, 25, 50, 75, 100].forEach(f => {
-      const y = padT + plotH * (1 - f / 100);
-      axis(svg, padL, W - padR, y, y);
-      text(svg, padL - 8, y + 3, f + "%", "axis-text", "end");
-    });
-
-    const pts = data.map(d => {
-      const x = padL + ((d.x - minX) / (maxX - minX)) * plotW;
-      const y = padT + plotH * (1 - d.v / maxV);
-      return [x, y, d];
-    });
-
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute("d", pts.map((p, i) => (i === 0 ? "M" : "L") + p[0] + " " + p[1]).join(" "));
-    path.setAttribute("fill", "none");
-    path.setAttribute("stroke", v("--blue"));
-    path.setAttribute("stroke-width", "3");
-    path.setAttribute("stroke-linecap", "round");
-    path.setAttribute("stroke-linejoin", "round");
-    svg.appendChild(path);
-
-    pts.forEach(([x, y, d]) => {
-      const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-      dot.setAttribute("cx", x); dot.setAttribute("cy", y); dot.setAttribute("r", d.emph ? 6 : 4);
-      dot.setAttribute("fill", d.emph ? v("--orange") : v("--blue"));
-      dot.setAttribute("stroke", v("--surface"));
-      dot.setAttribute("stroke-width", "2");
-      svg.appendChild(dot);
-      text(svg, x, y - 12, d.v + "%", "val-text");
-      text(svg, x, H - padB + 18, "Day " + d.x, "axis-text");
-    });
-  }
-
-  lineChart("chart-recovery", [
-    { x: 1, v: 93 },
-    { x: 3, v: 84 },
-    { x: 5, v: 69, emph: true },
-    { x: 7, v: 51 },
-    { x: 14, v: 20 },
-  ]);
-
-  barChart("chart-nudge", [
-    { label: "1", v: 3.7, color: v("--ink-3") },
-    { label: "2", v: 3.8, color: v("--ink-3") },
-    { label: "3", v: 3.6, color: v("--ink-3") },
-    { label: "5", v: 7.7, color: v("--orange"), emph: "best" },
-    { label: "7", v: 4.1, color: v("--ink-3") },
-  ], { max: 9, fmtV: (n) => "+" + n.toFixed(1) });
-
-  barChart("chart-consistency", [
-    { label: "10%", v: 2435, color: v("--blue") },
-    { label: "20%", v: 477, color: v("--blue") },
-    { label: "30%", v: 286, color: v("--blue") },
-    { label: "40%", v: 206, color: v("--blue") },
-    { label: "50%", v: 188, color: v("--blue") },
-    { label: "60%", v: 116, color: v("--blue") },
-    { label: "70%", v: 78, color: v("--blue") },
-    { label: "80%", v: 173, color: v("--blue") },
-    { label: "90%", v: 834, color: v("--green") },
-    { label: "100%", v: 207, color: v("--green") },
-  ], { max: 2600, fmtV: (n) => n >= 1000 ? (n/1000).toFixed(1) + "k" : n, bwFrac: 0.65 });
-
-  barChart("chart-dow", [
-    { label: "Mon", v: 947, color: v("--blue") },
-    { label: "Tue", v: 1058, color: v("--blue") },
-    { label: "Wed", v: 1091, color: v("--blue") },
-    { label: "Thu", v: 1112, color: v("--blue") },
-    { label: "Fri", v: 1145, color: v("--blue") },
-    { label: "Sat", v: 794, color: v("--yellow") },
-    { label: "Sun", v: 696, color: v("--yellow") },
-  ], { max: 1300, padR: 16 });
 })();
 </script>
+</body></html>
