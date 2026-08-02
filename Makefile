@@ -1,4 +1,4 @@
-.PHONY: help setup db-up db-down db-shell schema run-sim reseed streak survival cohort nudge report test lint fmt notebook clean
+.PHONY: help setup db-up db-down db-shell schema run-sim reseed streak survival cohort nudge quality report test lint fmt notebook clean
 
 VENV := venv
 PY   := $(VENV)/bin/python
@@ -49,10 +49,13 @@ cohort:  ## Build D1/D7/D30/D90 cohort retention curves
 nudge:  ## Run the nudge treatment/control statistical test
 	$(PY) -m src.analysis.nudge_simulation
 
+quality:  ## Run data quality checks and write flags
+	$(PY) -m src.analysis.data_quality
+
 report:  ## Generate the weekly markdown report
 	$(PY) -m src.reporting.generate_weekly_report
 
-all: schema reseed streak survival cohort nudge report  ## Full pipeline, end to end
+all: schema reseed streak survival cohort nudge quality report  ## Full pipeline, end to end
 
 test:  ## Run the test suite
 	$(VENV)/bin/pytest -q
