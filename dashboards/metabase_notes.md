@@ -120,15 +120,15 @@ time.
 
 Metabase itself needs Docker running locally, so there is no way to give
 someone a link to *this* instance. As the next best thing,
-[`live_findings.html`](live_findings.html) is a self-contained static page
+[`docs/index.html`](../docs/index.html) is a self-contained static page
 with the same headline numbers (recovery curve, nudge lift, consistency
 distribution, day-of-week effect), hand-built as inline SVG against the same
 validated palette used everywhere else in the project. No chart library, no
 external requests, themed for light and dark.
 
-Published copy: **https://claude.ai/code/artifact/5cb37bd8-b34a-4b18-95da-ed53e3daa950**
+Published copy, served by GitHub Pages straight from this repo: **https://navneet-scaler.github.io/cadence/**
 
 The numbers are a snapshot, not a live query, labelled as such on the page
 itself. To update it after a reseed, regenerate the figures in
 `reports/figures/` and edit the inline data arrays in
-`dashboards/live_findings.html` to match.
+`docs/index.html` to match, then push to `main`. GitHub Pages redeploys automatically.
