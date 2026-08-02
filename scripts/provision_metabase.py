@@ -36,7 +36,7 @@ logger = logging.getLogger("cadence.metabase")
 
 QUESTIONS_PATH = PROJECT_ROOT / "sql" / "dashboard_questions.sql"
 
-DASHBOARD_NAME = "Cadence — Daily SIP Habit & Streak Retention"
+DASHBOARD_NAME = "Cadence: Daily SIP Habit & Streak Retention"
 DASHBOARD_DESCRIPTION = (
     "Daily investing habit health: who is holding a streak, where streaks break, "
     "whether lapsed users come back, and whether the nudge changes that."
@@ -242,8 +242,31 @@ def ensure_database(client: MetabaseClient, db_config: dict, name: str = "Cadenc
     return database_id
 
 
+CARD_TAG_RE = re.compile(r"^Card (\d+), defined in sql/dashboard_questions\.sql$")
+
+
+def find_existing_cards(client: MetabaseClient) -> dict[int, int]:
+    """Map card number to card id by parsing the description tag this script writes.
+
+    Matching by description rather than by title means renaming a card's title
+    in ``dashboard_questions.sql`` updates the existing card in place instead of
+    creating a duplicate — title text is presentation, not identity.
+    """
+    mapping: dict[int, int] = {}
+    for card in client.get("card"):
+        match = CARD_TAG_RE.match(card.get("description") or "")
+        if match:
+            mapping[int(match.group(1))] = card["id"]
+    return mapping
+
+
 def upsert_card(
-    client: MetabaseClient, database_id: int, number: int, title: str, sql: str, existing: dict
+    client: MetabaseClient,
+    database_id: int,
+    number: int,
+    title: str,
+    sql: str,
+    existing: dict[int, int],
 ) -> int:
     """Create or update one native-SQL question."""
     payload = {
@@ -255,11 +278,11 @@ def upsert_card(
         },
         "display": CARD_DISPLAY.get(number, "table"),
         "visualization_settings": CARD_VIZ_SETTINGS.get(number, {}),
-        "description": f"Card {number} — defined in sql/dashboard_questions.sql",
+        "description": f"Card {number}, defined in sql/dashboard_questions.sql",
     }
 
-    if title in existing:
-        card_id = existing[title]
+    if number in existing:
+        card_id = existing[number]
         client.put(f"card/{card_id}", payload)
         logger.info("updated card %d: %s", number, title)
         return card_id
@@ -297,7 +320,14 @@ def upsert_dashboard(client: MetabaseClient, card_ids: dict[int, int]) -> int:
                 "size_x": size_x,
                 "size_y": size_y,
                 "parameter_mappings": [],
-                "visualization_settings": {},
+                # Duplicated from CARD_VIZ_SETTINGS rather than left empty: an
+                # empty dashcard override should inherit the card's own display
+                # settings, but leaving it unset is exactly the state that
+                # shipped the "which fields do you want on the X and Y axes"
+                # placeholder on first provisioning. Setting it explicitly here
+                # too is redundant belt-and-suspenders, not a workaround for a
+                # bug that's still open.
+                "visualization_settings": CARD_VIZ_SETTINGS.get(number, {}),
             }
         )
 
@@ -344,7 +374,7 @@ def main() -> int:
         database_id = ensure_database(client, db_config)
 
         questions = parse_questions(QUESTIONS_PATH)
-        existing_cards = {c["name"]: c["id"] for c in client.get("card")}
+        existing_cards = find_existing_cards(client)
 
         card_ids = {
             number: upsert_card(client, database_id, number, title, sql, existing_cards)

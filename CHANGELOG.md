@@ -4,14 +4,14 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0] — 2026-08-02
+## [1.0.0]: 2026-08-02
 
 First complete release: raw transactions to a decision memo, end to end.
 
 ### Added
 
 **Data layer**
-- PostgreSQL schema layered by meaning — production-shaped tables, a governance
+- PostgreSQL schema layered by meaning, production-shaped tables, a governance
   log, derived analytics tables, and simulation ground truth kept separate so it
   can never be mistaken for an observed field.
 - `v_clean_transactions` defining dedup and signup-validity rules once.
@@ -47,10 +47,10 @@ First complete release: raw transactions to a decision memo, end to end.
 - 101 tests, none requiring a database.
 
 **Documentation**
-- `MEMO.md` — the one-page decision memo.
-- `ASSUMPTIONS.md` — what is real and what is modelled.
-- `data_quality_findings.md` — six findings with fixes.
-- `dashboards/metabase_notes.md` — dashboard setup and the traps in it.
+- `MEMO.md`: the one-page decision memo.
+- `ASSUMPTIONS.md`: what is real and what is modelled.
+- `data_quality_findings.md`: six findings with fixes.
+- `dashboards/metabase_notes.md`: dashboard setup and the traps in it.
 
 ### Findings
 - Recovery after a lapse collapses between day 3 (84%) and day 7 (51%); day 5 is
@@ -65,7 +65,7 @@ First complete release: raw transactions to a decision memo, end to end.
 
 ### Fixed
 - Card 7 of the dashboard grouped by an aggregate (`EXTRACT(ISODOW FROM
-  MIN(txn_date))`), which PostgreSQL rejects — caught by running every card
+  MIN(txn_date))`), which PostgreSQL rejects, caught by running every card
   rather than assuming they worked.
 - Reseeding no longer happens as a side effect of `make run-sim`: `TRUNCATE ...
   RESTART IDENTITY CASCADE` would orphan any downstream table with a foreign key

@@ -16,7 +16,7 @@
 -- =============================================================================
 
 
--- CARD 1 — Daily active investors (line, trailing 90 days)
+-- CARD 1 — Daily Active Investors
 -- The top-line habit metric. Anything else on this dashboard explains a move here.
 SELECT txn_date          AS "Date",
        active_users      AS "Active investors",
@@ -26,7 +26,7 @@ WHERE txn_date >= (SELECT MAX(txn_date) - 90 FROM v_daily_active_users)
 ORDER BY txn_date;
 
 
--- CARD 2 — Live streaks by length band (bar)
+-- CARD 2 — Live Streaks by Length Band
 -- How many people currently hold a habit, and how deep it goes. Only censored
 -- streaks are live: an uncensored streak has already ended.
 SELECT CASE
@@ -43,7 +43,7 @@ GROUP BY 1
 ORDER BY MIN(streak_length);
 
 
--- CARD 3 — Recovery rate by days missed (bar) — THE decision card
+-- CARD 3 — Recovery Rate by Days Missed
 -- Reads straight off the risk set: of the breaks that reached N days without
 -- returning, what share came back within 30 days. This is the card the
 -- intervention day is chosen from.
@@ -73,7 +73,7 @@ GROUP BY m.days_missed
 ORDER BY m.days_missed;
 
 
--- CARD 4 — Nudge effect: treatment vs control (grouped bar)
+-- CARD 4 — Nudge Effect: Treatment vs Control
 -- The experiment result, at the grain the product team would act on.
 WITH window_end AS (
     SELECT MAX(txn_date) AS last_day FROM v_clean_transactions
@@ -119,7 +119,7 @@ GROUP BY 1, 2
 ORDER BY 1, 2;
 
 
--- CARD 5 — Weekly cohort retention (table / pivot)
+-- CARD 5 — Weekly Cohort Retention
 -- Retention defined as "still transacting", not "still has an account".
 WITH window_end AS (
     SELECT MAX(txn_date) AS last_day FROM v_clean_transactions
@@ -157,7 +157,7 @@ HAVING COUNT(DISTINCT c.user_id) >= 50
 ORDER BY c.cohort_week;
 
 
--- CARD 6 — Consistency distribution (histogram)
+-- CARD 6 — Consistency Distribution
 -- Per-user active-day ratio. The long left tail is the churn problem made visual.
 SELECT WIDTH_BUCKET(active_day_ratio, 0, 1, 10) * 10 || '%' AS "Active-day ratio",
        COUNT(*)                                             AS "Users"
@@ -166,7 +166,7 @@ GROUP BY 1
 ORDER BY MIN(active_day_ratio);
 
 
--- CARD 7 — Day-of-week effect (bar)
+-- CARD 7 — Day of Week Effect
 -- Confirms the weekend softness the simulation encodes and real fintech shows.
 SELECT TO_CHAR(txn_date, 'Dy')                              AS "Day",
        ROUND(AVG(active_users))                             AS "Avg active investors"
@@ -177,7 +177,7 @@ GROUP BY TO_CHAR(txn_date, 'Dy'), EXTRACT(ISODOW FROM txn_date)
 ORDER BY EXTRACT(ISODOW FROM txn_date);
 
 
--- CARD 8 — Open data quality flags (table)
+-- CARD 8 — Open Data Quality Flags
 -- Governance on the same dashboard as the metrics, so a number nobody trusts is
 -- visible next to the reason not to trust it.
 SELECT severity      AS "Severity",
