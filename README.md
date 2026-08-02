@@ -12,7 +12,7 @@ Turns raw daily investment transactions into streak health signals, finds where 
 [![PostgreSQL 16](https://img.shields.io/badge/postgres-16-336791)](https://www.postgresql.org/)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
 
-**[View Live Findings →](https://claude.ai/code/artifact/5cb37bd8-b34a-4b18-95da-ed53e3daa950)**
+**[View Live Findings →](https://navneet-scaler.github.io/cadence/)**
 &nbsp;·&nbsp;
 [Read the Memo](MEMO.md)
 &nbsp;·&nbsp;
@@ -314,6 +314,6 @@ matplotlib · Metabase · Docker · pytest · GitHub Actions
 <div align="center">
 
 Built end to end from schema to decision memo.
-[GitHub](https://github.com/Navneet-Scaler/cadence) · [Releases](https://github.com/Navneet-Scaler/cadence/releases) · [Live Findings](https://claude.ai/code/artifact/5cb37bd8-b34a-4b18-95da-ed53e3daa950)
+[GitHub](https://github.com/Navneet-Scaler/cadence) · [Releases](https://github.com/Navneet-Scaler/cadence/releases) · [Live Findings](https://navneet-scaler.github.io/cadence/)
 
 </div>
