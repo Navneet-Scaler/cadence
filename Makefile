@@ -1,4 +1,4 @@
-.PHONY: help setup db-up db-down db-shell schema run-sim reseed streak survival cohort nudge quality report test lint fmt notebook clean
+.PHONY: help setup db-up db-down db-shell schema run-sim reseed streak survival cohort nudge quality report dashboard test lint fmt notebook clean
 
 VENV := venv
 PY   := $(VENV)/bin/python
@@ -51,6 +51,9 @@ nudge:  ## Run the nudge treatment/control statistical test
 
 quality:  ## Run data quality checks and write flags
 	$(PY) -m src.analysis.data_quality
+
+dashboard:  ## Provision the Metabase dashboard from sql/dashboard_questions.sql
+	$(PY) -m scripts.provision_metabase
 
 report:  ## Generate the weekly markdown report
 	$(PY) -m src.reporting.generate_weekly_report

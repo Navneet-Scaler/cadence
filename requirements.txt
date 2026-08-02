@@ -14,3 +14,4 @@ black==24.4.2
 ruff==0.4.4
 nbstripout==0.7.1
 pre-commit==3.7.1
+requests==2.32.3
