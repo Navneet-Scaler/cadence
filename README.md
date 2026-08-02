@@ -10,15 +10,15 @@ Turns raw daily investment transactions into streak health signals, finds where 
 [![Release](https://img.shields.io/github/v/release/Navneet-Scaler/cadence)](https://github.com/Navneet-Scaler/cadence/releases)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/)
 [![PostgreSQL 16](https://img.shields.io/badge/postgres-16-336791)](https://www.postgresql.org/)
-[![License](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
 
 **[View Live Findings →](https://navneet-scaler.github.io/cadence/)**
 &nbsp;·&nbsp;
 [Read the Memo](MEMO.md)
 &nbsp;·&nbsp;
-[See the Dashboard](#the-dashboard)
-&nbsp;·&nbsp;
 [Quickstart](#quickstart)
+&nbsp;·&nbsp;
+[Architecture](#architecture)
 
 </div>
 
@@ -31,18 +31,19 @@ Turns raw daily investment transactions into streak health signals, finds where 
 
 ## Table of contents
 
-- [Why this exists](#why-this-exists)
-- [The answer](#the-answer)
-- [Schema](#schema)
+- [Overview](#overview)
+- [Key result](#key-result)
+- [Live demo](#live-demo)
 - [Quickstart](#quickstart)
+- [Architecture](#architecture)
 - [How it works](#how-it-works)
-- [The dashboard](#the-dashboard)
 - [Findings](#findings)
-- [Repository layout](#repository-layout)
-- [Stack](#stack)
-- [Engineering notes](#engineering-notes)
+- [Testing and CI](#testing-and-ci)
+- [Project structure](#project-structure)
+- [Tech stack](#tech-stack)
+- [License](#license)
 
-## Why this exists
+## Overview
 
 Most fintech retention frameworks are built for **monthly** behaviour: monthly
 SIPs, monthly billing, monthly cohorts. A product built on investing ₹21
@@ -60,7 +61,7 @@ good." Cadence measures that gap end to end: schema, simulation, streak
 construction, survival analysis, a randomised nudge experiment, and a live
 dashboard.
 
-## The answer
+## Key result
 
 **Nudge on day 5 of a lapse, not day 1.**
 
@@ -81,7 +82,55 @@ randomised experiment, locate day 5 from separate arithmetic.
 
 **[Read the full one-page memo →](MEMO.md)**
 
-## Schema
+## Live demo
+
+**[navneet-scaler.github.io/cadence →](https://navneet-scaler.github.io/cadence/)**
+
+A replayable, statistically annotated tour of the full analysis: every chart
+from the dashboard below, a Simple/Advanced toggle on every explanation, and a
+replay of the actual daily-active-investor series for the full simulated
+year with a live event feed. Generated straight from the database by
+[`scripts/build_live_page.py`](scripts/build_live_page.py), deployed by
+GitHub Pages, no external dependency once it loads.
+
+<img src="dashboards/images/dashboard_hero.png" alt="Cadence Metabase dashboard showing daily active investors, streak length distribution, recovery rate by days missed, nudge effect, and weekly cohort retention" width="100%">
+
+Eight cards, provisioned end to end from version-controlled SQL rather than
+clicked together in the Metabase UI, so the dashboard cannot silently drift
+from the analysis. Full-height screenshot and every card's query in
+[`dashboards/metabase_notes.md`](dashboards/metabase_notes.md) and
+[`sql/dashboard_questions.sql`](sql/dashboard_questions.sql).
+
+```bash
+make dashboard   # rebuilds this exact instance in about 90 seconds
+```
+
+## Quickstart
+
+Needs Docker and Python 3.12 (installed automatically via [uv](https://docs.astral.sh/uv/) if missing).
+
+```bash
+git clone https://github.com/Navneet-Scaler/cadence.git && cd cadence
+cp .env.example .env               # fill in DB credentials
+
+make setup                         # venv, pinned deps, pre-commit hooks
+make db-up                         # postgres:16 in Docker
+make schema                        # apply the DDL
+make run-sim                       # generate + load 373k transactions (~8s)
+make all                           # streaks, survival, cohorts, nudge, quality, report
+```
+
+Then, to see the results:
+
+```bash
+make dashboard                     # provisions Metabase at localhost:3001
+make notebook                      # or open notebooks/streak_analysis.ipynb
+```
+
+Run `make help` for every command. A full pipeline run from empty database to
+finished report takes under a minute.
+
+## Architecture
 
 ```mermaid
 erDiagram
@@ -141,30 +190,18 @@ tables (`user_streaks`, `streak_observations`) are safe to truncate and
 rebuild, and `sim_user_profile` holds simulation ground truth in its own table
 so it can never be mistaken for an observed field.
 
-## Quickstart
-
-Needs Docker and Python 3.12 (installed automatically via [uv](https://docs.astral.sh/uv/) if missing).
-
-```bash
-git clone https://github.com/Navneet-Scaler/cadence.git && cd cadence
-cp .env.example .env               # fill in DB credentials
-
-make setup                         # venv, pinned deps, pre-commit hooks
-make db-up                         # postgres:16 in Docker
-make schema                        # apply the DDL
-make run-sim                       # generate + load 373k transactions (~8s)
-make all                           # streaks, survival, cohorts, nudge, quality, report
+```mermaid
+flowchart LR
+    A["Simulator<br/>src/simulate/"] -->|"COPY, ~8s"| B[(PostgreSQL 16)]
+    B --> C["Streak builder<br/>gaps-and-islands SQL"]
+    C --> D["Survival analysis<br/>Kaplan-Meier + Cox PH"]
+    C --> E["Cohort analysis"]
+    C --> F["Nudge experiment"]
+    B --> G["Data quality checks"]
+    D & E & F & G --> H["Weekly report<br/>cron-scheduled"]
+    D & E & F & G --> I["Metabase dashboard<br/>version-controlled SQL"]
+    D & E & F & G --> J["Live findings page<br/>GitHub Pages"]
 ```
-
-Then, to see the results:
-
-```bash
-make dashboard                     # provisions Metabase at localhost:3001
-make notebook                      # or open notebooks/streak_analysis.ipynb
-```
-
-Run `make help` for every command. A full pipeline run from empty database to
-finished report takes under a minute.
 
 ## How it works
 
@@ -216,20 +253,6 @@ the **same gap length unrecovered**. A user who returned on day 1 was never
 reachable by a day-3 nudge and does not belong in that denominator. Five
 thresholds tested, Holm-Bonferroni corrected.
 
-## The dashboard
-
-<img src="dashboards/images/dashboard_hero.png" alt="Cadence Metabase dashboard showing daily active investors, streak length distribution, recovery rate by days missed, nudge effect, and weekly cohort retention" width="100%">
-
-Eight cards, provisioned end to end from version-controlled SQL rather than
-clicked together in the Metabase UI, so the dashboard cannot silently drift
-from the analysis. Full-height screenshot and every card's query in
-[`dashboards/metabase_notes.md`](dashboards/metabase_notes.md) and
-[`sql/dashboard_questions.sql`](sql/dashboard_questions.sql).
-
-```bash
-make dashboard   # rebuilds this exact instance in about 90 seconds
-```
-
 ## Findings
 
 **Recovery collapses between day 3 and day 7.** 84% to 51%. Day 5 is the
@@ -257,7 +280,23 @@ null result is still a finding.
 account-based definition reads 55%. Measured against the actual daily
 promise, actually invested that day, it is 36%.
 
-## Repository layout
+## Testing and CI
+
+102 tests, 101 of them requiring no database at all. CI runs two jobs on
+every pull request:
+
+| Job | What it checks |
+|---|---|
+| `quality` | `black --check`, `ruff`, and the database-free test suite |
+| `db-tests` | Brings up Postgres, applies the schema, seeds data, and runs the SQL/pandas streak-parity check for real |
+
+Reseeding is explicit: `TRUNCATE ... RESTART IDENTITY CASCADE` would orphan
+any downstream foreign key, so it requires `--reseed` and never happens as a
+side effect of a normal run. `.gitignore` landed in the first commit, before
+anything else was staged, no credentials or generated data have ever been in
+git history.
+
+## Project structure
 
 | Path | What it is |
 |---|---|
@@ -267,15 +306,16 @@ promise, actually invested that day, it is 36%.
 | [`src/simulate/`](src/simulate/) | Behavioural data generator |
 | [`src/analysis/`](src/analysis/) | Streaks, survival, cohorts, nudge, data quality |
 | [`src/reporting/`](src/reporting/) | Scheduled weekly report |
-| [`scripts/`](scripts/) | Cron wrapper, Metabase provisioning |
+| [`scripts/`](scripts/) | Cron wrapper, Metabase provisioning, live page generator |
 | [`tests/`](tests/) | 101 unit tests + 1 DB-backed integration test |
 | [`notebooks/`](notebooks/streak_analysis.ipynb) | Narrative walkthrough, imports from `src/` |
+| [`docs/index.html`](docs/index.html) | Source for the live findings page |
 | [`MEMO.md`](MEMO.md) | The one-page decision memo |
 | [`ASSUMPTIONS.md`](ASSUMPTIONS.md) | What is real versus what is modelled |
 | [`data_quality_findings.md`](data_quality_findings.md) | 6 findings with fix DDL |
 | [`dashboards/metabase_notes.md`](dashboards/metabase_notes.md) | Dashboard setup and screenshot |
 
-## Stack
+## Tech stack
 
 <div>
 
@@ -288,32 +328,13 @@ promise, actually invested that day, it is 36%.
 ![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
 ![pytest](https://img.shields.io/badge/pytest-0A9EDC?logo=pytest&logoColor=white)
 ![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-2088FF?logo=githubactions&logoColor=white)
+![GitHub Pages](https://img.shields.io/badge/GitHub_Pages-222222?logo=githubpages&logoColor=white)
 
 </div>
 
 PostgreSQL 16 · Python 3.12 · pandas · lifelines · scipy · statsmodels ·
-matplotlib · Metabase · Docker · pytest · GitHub Actions
+matplotlib · Metabase · Docker · pytest · GitHub Actions · GitHub Pages
 
-## Engineering notes
+## License
 
-- **No generated data in git.** The generator is the artifact. Data is
-  regenerable from a fixed seed, byte for byte, with a test asserting it.
-- **No credentials in source.** All configuration comes from the environment.
-  `.gitignore` landed in the first commit, before anything else was staged.
-- **Reseeding is explicit.** `TRUNCATE ... RESTART IDENTITY CASCADE` would
-  orphan any downstream foreign key, so it requires `--reseed` and never
-  happens as a side effect of a normal run.
-- **CI runs two jobs.** `quality` covers formatting, linting, and the
-  database-free test suite. `db-tests` brings up Postgres, applies the
-  schema, seeds data, and runs the SQL/pandas streak-parity check for real.
-- **Every chart carries numbers**, and non-significant results are drawn
-  rather than dropped.
-
----
-
-<div align="center">
-
-Built end to end from schema to decision memo.
-[GitHub](https://github.com/Navneet-Scaler/cadence) · [Releases](https://github.com/Navneet-Scaler/cadence/releases) · [Live Findings](https://navneet-scaler.github.io/cadence/)
-
-</div>
+[MIT](LICENSE), see the file for the full text.
