@@ -54,6 +54,22 @@ CARD_DISPLAY = {
     8: "table",
 }
 
+# Explicit axis mapping per card, keyed by the column names each query returns
+# (sql/dashboard_questions.sql column aliases). Native SQL questions have no
+# GUI-built query for Metabase to infer a chart shape from, so without this a
+# bar/line card renders as an unconfigured axis picker ("Which fields do you
+# want to use for the X and Y axes?") instead of a chart — exactly what shipped
+# before this was added, caught by actually opening the dashboard rather than
+# trusting that "created successfully" meant "renders correctly".
+CARD_VIZ_SETTINGS: dict[int, dict[str, list[str]]] = {
+    1: {"graph.dimensions": ["Date"], "graph.metrics": ["Active investors"]},
+    2: {"graph.dimensions": ["Streak length"], "graph.metrics": ["Live streaks"]},
+    3: {"graph.dimensions": ["Days missed"], "graph.metrics": ["Recovered within 30d %"]},
+    4: {"graph.dimensions": ["Nudge day", "Group"], "graph.metrics": ["Recovered %"]},
+    6: {"graph.dimensions": ["Active-day ratio"], "graph.metrics": ["Users"]},
+    7: {"graph.dimensions": ["Day"], "graph.metrics": ["Avg active investors"]},
+}
+
 # Grid is 24 columns wide. (col, row, size_x, size_y) per card.
 CARD_LAYOUT = {
     1: (0, 0, 24, 6),
@@ -238,7 +254,7 @@ def upsert_card(
             "database": database_id,
         },
         "display": CARD_DISPLAY.get(number, "table"),
-        "visualization_settings": {},
+        "visualization_settings": CARD_VIZ_SETTINGS.get(number, {}),
         "description": f"Card {number} — defined in sql/dashboard_questions.sql",
     }
 
