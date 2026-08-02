@@ -180,7 +180,9 @@ def build_gap_frame(streaks: pd.DataFrame, observation_end: pd.Timestamp) -> pd.
     days_remaining = (pd.to_datetime(observation_end) - breaks["streak_end"]).dt.days
 
     breaks["returned"] = observed_gap.notna().astype(int)
-    breaks["gap_duration"] = observed_gap.fillna(days_remaining).astype(float)
+    # Cast before filling: days_to_next_streak arrives as a nullable object column,
+    # and letting fillna do the downcast is deprecated in pandas 2.2.
+    breaks["gap_duration"] = observed_gap.astype("float64").fillna(days_remaining.astype("float64"))
 
     # A break on the final day has zero exposure and tells us nothing.
     breaks = breaks[breaks["gap_duration"] > 0]
